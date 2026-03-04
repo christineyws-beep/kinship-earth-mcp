@@ -1,0 +1,21 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+type: software
+title: "Kinship Earth MCP"
+abstract: >
+  Ecological intelligence middleware — a unified MCP/REST API connecting
+  fragmented ecological data sources (NEON, OBIS, ERA5, Xeno-canto, eBird, GBIF)
+  into a single queryable interface for AI agents and researchers.
+version: 0.1.0
+date-released: "2026-03-02"
+license: MIT
+repository-code: "https://github.com/yourusername/kinship-earth-mcp"
+keywords:
+  - ecology
+  - biodiversity
+  - MCP
+  - model-context-protocol
+  - ecological-informatics
+  - NEON
+  - GBIF
+  - FAIR-data
