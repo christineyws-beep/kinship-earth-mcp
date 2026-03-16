@@ -27,6 +27,8 @@ from mcp.server.fastmcp import FastMCP
 from neonscience_mcp.adapter import NeonAdapter
 from obis_mcp.adapter import OBISAdapter
 from era5_mcp.adapter import ERA5Adapter
+from inaturalist_mcp.adapter import INaturalistAdapter
+from ebird_mcp.adapter import EBirdAdapter
 
 from kinship_shared import (
     run_describe_sources,
@@ -56,6 +58,8 @@ mcp = FastMCP(
 _neon = NeonAdapter(api_token=os.environ.get("NEON_API_TOKEN"))
 _obis = OBISAdapter()
 _era5 = ERA5Adapter()
+_inat = INaturalistAdapter()
+_ebird = EBirdAdapter(api_key=os.environ.get("EBIRD_API_KEY"))
 
 
 # ---------------------------------------------------------------------------
@@ -137,6 +141,7 @@ async def ecology_search(
         radius_km=radius_km, start_date=start_date, end_date=end_date,
         include_climate=include_climate, limit=limit,
         obis=_obis, neon=_neon, era5=_era5,
+        inat=_inat, ebird=_ebird,
     )
 
 
@@ -150,7 +155,79 @@ async def ecology_describe_sources() -> dict:
     requirements. Use this to understand what data is available before
     searching.
     """
-    return await run_describe_sources(neon=_neon, obis=_obis, era5=_era5)
+    return await run_describe_sources(neon=_neon, obis=_obis, era5=_era5, inat=_inat, ebird=_ebird)
+
+
+# DRAFT: citizen-facing discovery tool (pending full eBird + iNaturalist validation)
+@mcp.tool()
+async def ecology_whats_around_me(
+    lat: float,
+    lon: float,
+    radius_km: float = 25,
+    days_back: int = 7,
+) -> dict:
+    """
+    Discover what's been observed near a location recently.
+
+    A citizen-friendly entry point: "What's happening in the ecosystem around me?"
+    Returns a snapshot combining recent species sightings, nearby monitoring sites,
+    and current climate conditions from all available data sources.
+
+    Args:
+        lat: Your latitude in decimal degrees.
+        lon: Your longitude in decimal degrees (negative = West).
+        radius_km: How far to look (default 25 km).
+        days_back: How many days of recent observations to include (default 7).
+
+    Returns a combined ecological snapshot: recent species sightings (from eBird,
+    iNaturalist, and OBIS), nearby monitoring sites (NEON), and current climate
+    conditions (ERA5).
+    """
+    from datetime import datetime, timedelta
+
+    end_date = datetime.now().strftime("%Y-%m-%d")
+    start_date = (datetime.now() - timedelta(days=days_back)).strftime("%Y-%m-%d")
+
+    result = await run_search(
+        lat=lat, lon=lon,
+        radius_km=radius_km,
+        start_date=start_date,
+        end_date=end_date,
+        include_climate=True,
+        limit=30,
+        obis=_obis, neon=_neon, era5=_era5,
+        inat=_inat, ebird=_ebird,
+    )
+
+    # Summarize by source for the citizen
+    by_source = {}
+    for occ in result.get("species_occurrences", []):
+        src = occ.get("source", "obis")
+        if src not in by_source:
+            by_source[src] = []
+        by_source[src].append(occ)
+
+    # Count unique species
+    species_names = set()
+    for occ in result.get("species_occurrences", []):
+        name = occ.get("scientific_name")
+        if name:
+            species_names.add(name)
+
+    return {
+        "snapshot": {
+            "location": {"lat": lat, "lon": lon, "radius_km": radius_km},
+            "period": f"Last {days_back} days ({start_date} to {end_date})",
+            "unique_species": len(species_names),
+            "total_observations": len(result.get("species_occurrences", [])),
+            "monitoring_sites_nearby": result.get("neon_site_count", 0),
+            "climate_data_available": result.get("climate") is not None,
+        },
+        "recent_sightings": result.get("species_occurrences", [])[:20],
+        "neon_sites": result.get("neon_sites", []),
+        "climate": result.get("climate"),
+        "sources_queried": result.get("search_context", {}).get("sources_queried", []),
+    }
 
 
 # ---------------------------------------------------------------------------
