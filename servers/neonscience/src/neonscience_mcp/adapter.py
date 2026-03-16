@@ -14,6 +14,7 @@ NEON citation requirement: always include the dataset DOI and citation string.
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -27,7 +28,10 @@ from kinship_shared import (
     Provenance,
     Quality,
     SearchParams,
+    http_get_with_retry,
 )
+
+logger = logging.getLogger(__name__)
 
 NEON_API_BASE = "https://data.neonscience.org/api/v0"
 NEON_PORTAL_BASE = "https://data.neonscience.org"
@@ -73,14 +77,15 @@ class NeonAdapter(EcologicalAdapter):
     async def list_sites(self) -> list[dict]:
         """Fetch all 81 NEON field sites."""
         async with httpx.AsyncClient(headers=self._headers, timeout=30) as client:
-            resp = await client.get(f"{NEON_API_BASE}/sites")
+            resp = await http_get_with_retry(client, f"{NEON_API_BASE}/sites")
+            logger.info("NEON list_sites HTTP response: status=%d", resp.status_code)
             resp.raise_for_status()
             return resp.json().get("data", [])
 
     async def get_site(self, site_code: str) -> Optional[dict]:
         """Fetch details for a single NEON site by its code (e.g. 'WREF')."""
         async with httpx.AsyncClient(headers=self._headers, timeout=30) as client:
-            resp = await client.get(f"{NEON_API_BASE}/sites/{site_code.upper()}")
+            resp = await http_get_with_retry(client, f"{NEON_API_BASE}/sites/{site_code.upper()}")
             # NEON returns 404 for unknown but valid-format codes,
             # and 400 for malformed codes (e.g. codes that are too long).
             # Both mean "not found" from our perspective.
@@ -92,14 +97,14 @@ class NeonAdapter(EcologicalAdapter):
     async def list_data_products(self) -> list[dict]:
         """Fetch all available NEON data products."""
         async with httpx.AsyncClient(headers=self._headers, timeout=30) as client:
-            resp = await client.get(f"{NEON_API_BASE}/products")
+            resp = await http_get_with_retry(client, f"{NEON_API_BASE}/products")
             resp.raise_for_status()
             return resp.json().get("data", [])
 
     async def get_data_product(self, product_code: str) -> Optional[dict]:
         """Fetch metadata for a single NEON data product."""
         async with httpx.AsyncClient(headers=self._headers, timeout=30) as client:
-            resp = await client.get(f"{NEON_API_BASE}/products/{product_code}")
+            resp = await http_get_with_retry(client, f"{NEON_API_BASE}/products/{product_code}")
             if resp.status_code == 404:
                 return None
             resp.raise_for_status()
@@ -110,6 +115,7 @@ class NeonAdapter(EcologicalAdapter):
         Search NEON sites as observations.
         For now, returns site-level observations filtered by location proximity.
         """
+        logger.info("NEON search: lat=%s, lng=%s, radius_km=%s", params.lat, params.lng, params.radius_km)
         sites = await self.list_sites()
         results = []
 
@@ -134,6 +140,8 @@ class NeonAdapter(EcologicalAdapter):
             if len(results) >= params.limit:
                 break
 
+        if not results:
+            logger.warning("NEON search returned no sites within radius_km=%s of lat=%s, lng=%s", params.radius_km, params.lat, params.lng)
         return results
 
     async def get_by_id(self, source_id: str) -> Optional[EcologicalObservation]:

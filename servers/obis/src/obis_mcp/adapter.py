@@ -15,9 +15,12 @@ OBIS citation: data.obis.org — individual records carry per-record license fie
 
 from __future__ import annotations
 
+import logging
 import math
 from datetime import datetime, timezone
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 import httpx
 
@@ -30,6 +33,7 @@ from kinship_shared import (
     Quality,
     SearchParams,
     TaxonInfo,
+    http_get_with_retry,
 )
 
 OBIS_API_BASE = "https://api.obis.org/v3"
@@ -70,6 +74,7 @@ class OBISAdapter(EcologicalAdapter):
 
     async def search(self, params: SearchParams) -> list[EcologicalObservation]:
         """Search OBIS occurrence records."""
+        logger.info("OBIS search: taxon=%s, lat=%s, lng=%s, radius_km=%s", params.taxon, params.lat, params.lng, params.radius_km)
         query: dict = {"size": params.limit}
 
         if params.lat is not None and params.lng is not None and params.radius_km is not None:
@@ -90,7 +95,8 @@ class OBISAdapter(EcologicalAdapter):
             query["enddate"] = params.end_date
 
         async with httpx.AsyncClient(timeout=30) as client:
-            resp = await client.get(f"{OBIS_API_BASE}/occurrence", params=query)
+            resp = await http_get_with_retry(client, f"{OBIS_API_BASE}/occurrence", params=query)
+            logger.info("OBIS HTTP response: status=%d", resp.status_code)
             resp.raise_for_status()
             data = resp.json()
 
@@ -111,12 +117,14 @@ class OBISAdapter(EcologicalAdapter):
                         continue
                 results.append(obs)
 
+        if not results:
+            logger.warning("OBIS search returned empty results for taxon=%s", params.taxon)
         return results
 
     async def get_by_id(self, source_id: str) -> Optional[EcologicalObservation]:
         """Fetch a single OBIS occurrence by its UUID."""
         async with httpx.AsyncClient(timeout=30) as client:
-            resp = await client.get(f"{OBIS_API_BASE}/occurrence/{source_id}")
+            resp = await http_get_with_retry(client, f"{OBIS_API_BASE}/occurrence/{source_id}")
             if resp.status_code in (400, 404):
                 return None
             resp.raise_for_status()
@@ -130,7 +138,7 @@ class OBISAdapter(EcologicalAdapter):
     async def get_statistics(self) -> dict:
         """Fetch OBIS-wide statistics: total records, species, datasets."""
         async with httpx.AsyncClient(timeout=30) as client:
-            resp = await client.get(f"{OBIS_API_BASE}/statistics")
+            resp = await http_get_with_retry(client, f"{OBIS_API_BASE}/statistics")
             resp.raise_for_status()
             return resp.json()
 

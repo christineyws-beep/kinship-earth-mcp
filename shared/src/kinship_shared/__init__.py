@@ -2,6 +2,7 @@
 
 from .adapter import EcologicalAdapter
 from .ranking import rank_observations, score_observation
+from .retry import http_get_with_retry
 from .schema import (
     AdapterCapabilities,
     EcologicalObservation,
@@ -27,4 +28,5 @@ __all__ = [
     "Provenance",
     "rank_observations",
     "score_observation",
+    "http_get_with_retry",
 ]

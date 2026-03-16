@@ -20,9 +20,12 @@ Run via HTTP:  uv run python -m kinship_orchestrator.server
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 from datetime import datetime, timedelta
 from typing import Any, Optional
+
+logger = logging.getLogger(__name__)
 
 from mcp.server.fastmcp import FastMCP
 
@@ -90,6 +93,8 @@ async def ecology_get_environmental_context(
         - Nearest NEON field sites (within 200km)
         - Location metadata
     """
+    logger.info("ecology_get_environmental_context called: lat=%.4f, lon=%.4f, date=%s", lat, lon, date)
+
     # Validate inputs
     if not (-90 <= lat <= 90):
         return {"error": f"lat must be between -90 and 90, got {lat}"}
@@ -114,6 +119,7 @@ async def ecology_get_environmental_context(
     ))
 
     era5_raw, neon_sites = await asyncio.gather(era5_task, neon_task)
+    logger.info("environmental_context: %d NEON sites found, ERA5 keys=%s", len(neon_sites), list(era5_raw.get("daily", {}).keys())[:3])
 
     # Format NEON sites
     nearby_neon = [
@@ -191,6 +197,8 @@ async def ecology_search(
     Returns species occurrences (OBIS), nearby monitoring sites (NEON),
     and climate context (ERA5) in a single response.
     """
+    logger.info("ecology_search called: taxon=%s, lat=%s, lon=%s, radius_km=%s", scientificname, lat, lon, radius_km)
+
     # Validate coordinate bounds if provided
     if lat is not None and not (-90 <= lat <= 90):
         return {"error": f"lat must be between -90 and 90, got {lat}"}
@@ -240,6 +248,7 @@ async def ecology_search(
 
     for key, result in zip(task_keys, settled):
         if isinstance(result, Exception):
+            logger.error("ecology_search: source %s failed: %s", key, result)
             results[key] = {"error": str(result)}
         else:
             results[key] = result
@@ -321,6 +330,9 @@ async def ecology_search(
         "neon_sites_found": len(neon_sites),
         "climate_included": climate is not None,
     }
+
+    if not obis_occurrences and not neon_sites:
+        logger.warning("ecology_search: empty results for query taxon=%s, lat=%s, lon=%s", scientificname, lat, lon)
 
     # Add near-miss guidance when results are sparse
     if obis_occurrences and len(obis_occurrences) < 3 and (lat is not None and lon is not None):

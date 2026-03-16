@@ -27,6 +27,7 @@ DOI: 10.24381/cds.adbb2d47
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -40,7 +41,10 @@ from kinship_shared import (
     Provenance,
     Quality,
     SearchParams,
+    http_get_with_retry,
 )
+
+logger = logging.getLogger(__name__)
 
 OPEN_METEO_API_BASE = "https://archive-api.open-meteo.com/v1/archive"
 
@@ -155,7 +159,7 @@ class ERA5Adapter(EcologicalAdapter):
         }
 
         async with httpx.AsyncClient(timeout=30) as client:
-            resp = await client.get(OPEN_METEO_API_BASE, params=query)
+            resp = await http_get_with_retry(client, OPEN_METEO_API_BASE, params=query)
             resp.raise_for_status()
             return resp.json()
 
@@ -172,6 +176,7 @@ class ERA5Adapter(EcologicalAdapter):
 
         Returns the raw Open-Meteo response dict with daily time series.
         """
+        logger.info("ERA5 get_daily: lat=%.4f, lng=%.4f, %s to %s", lat, lng, start_date, end_date)
         vars_list = variables or DEFAULT_DAILY_VARS
         query = {
             "latitude": lat,
@@ -184,7 +189,8 @@ class ERA5Adapter(EcologicalAdapter):
         }
 
         async with httpx.AsyncClient(timeout=30) as client:
-            resp = await client.get(OPEN_METEO_API_BASE, params=query)
+            resp = await http_get_with_retry(client, OPEN_METEO_API_BASE, params=query)
+            logger.info("ERA5 HTTP response: status=%d", resp.status_code)
             resp.raise_for_status()
             return resp.json()
 
@@ -195,6 +201,7 @@ class ERA5Adapter(EcologicalAdapter):
         For ERA5, "search" means: given a location and date range, return daily
         climate summaries as observation records. Each day becomes one observation.
         """
+        logger.info("ERA5 search: lat=%s, lng=%s, dates=%s to %s", params.lat, params.lng, params.start_date, params.end_date)
         if params.lat is None or params.lng is None:
             return []
         if not params.start_date or not params.end_date:
