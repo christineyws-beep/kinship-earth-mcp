@@ -90,8 +90,17 @@ async def ecology_get_environmental_context(
         - Nearest NEON field sites (within 200km)
         - Location metadata
     """
+    # Validate inputs
+    if not (-90 <= lat <= 90):
+        return {"error": f"lat must be between -90 and 90, got {lat}"}
+    if not (-180 <= lon <= 180):
+        return {"error": f"lon must be between -180 and 180, got {lon}"}
+    try:
+        focal = datetime.strptime(date, "%Y-%m-%d")
+    except ValueError:
+        return {"error": f"date must be in YYYY-MM-DD format, got {date!r}"}
+
     # Calculate date range
-    focal = datetime.strptime(date, "%Y-%m-%d")
     start = (focal - timedelta(days=days_before)).strftime("%Y-%m-%d")
     end = (focal + timedelta(days=days_after)).strftime("%Y-%m-%d")
 
@@ -182,6 +191,12 @@ async def ecology_search(
     Returns species occurrences (OBIS), nearby monitoring sites (NEON),
     and climate context (ERA5) in a single response.
     """
+    # Validate coordinate bounds if provided
+    if lat is not None and not (-90 <= lat <= 90):
+        return {"error": f"lat must be between -90 and 90, got {lat}"}
+    if lon is not None and not (-180 <= lon <= 180):
+        return {"error": f"lon must be between -180 and 180, got {lon}"}
+
     tasks = {}
 
     # Always search OBIS if we have a species name or location

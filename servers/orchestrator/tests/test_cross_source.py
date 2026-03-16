@@ -252,3 +252,41 @@ async def test_describe_sources_lists_cross_source_tools():
     tool_names = [t["name"] for t in result["cross_source_tools"]]
     assert "ecology_get_environmental_context" in tool_names
     assert "ecology_search" in tool_names
+
+
+# ---------------------------------------------------------------------------
+# Input validation
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_environmental_context_bad_date():
+    """
+    VALIDATION TEST: A bad date string returns a clear error, not a traceback.
+    """
+    result = await ecology_get_environmental_context(
+        lat=WREF_LAT, lon=WREF_LNG, date="not-a-date",
+    )
+    assert "error" in result
+    assert "YYYY-MM-DD" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_environmental_context_invalid_lat():
+    """
+    VALIDATION TEST: Latitude out of range returns a clear error.
+    """
+    result = await ecology_get_environmental_context(
+        lat=999, lon=WREF_LNG, date="2023-06-15",
+    )
+    assert "error" in result
+    assert "lat" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_search_invalid_coordinates():
+    """
+    VALIDATION TEST: Out-of-range coordinates return a clear error.
+    """
+    result = await ecology_search(lat=200, lon=500)
+    assert "error" in result
+    assert "lat" in result["error"]
