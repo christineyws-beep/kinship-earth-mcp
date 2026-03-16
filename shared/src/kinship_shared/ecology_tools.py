@@ -219,7 +219,7 @@ async def run_search(
             })
         obis_occurrences.sort(key=lambda x: x["relevance"]["score"], reverse=True)
 
-    # Format iNaturalist results with relevance scores
+    # Format iNaturalist/eBird results — same schema as OBIS for consistency
     inat_occurrences = []
     for source_key in ("inat", "ebird"):
         if source_key in results and isinstance(results[source_key], list):
@@ -234,12 +234,14 @@ async def run_search(
                     "lng": obs.location.lng,
                     "observed_at": obs.observed_at.isoformat(),
                     "quality_tier": obs.quality.tier,
-                    "quality_grade": obs.quality.grade,
-                    "media_url": obs.media_url,
+                    "license": obs.provenance.license,
                     "source_url": obs.provenance.original_url,
+                    "media_url": obs.media_url,
                     "relevance": {
                         "score": relevance.score,
                         "geo_distance_km": relevance.geo_distance_km,
+                        "taxon_match": relevance.taxon_match,
+                        "quality_score": relevance.quality_score,
                         "explanation": relevance.explanation,
                     },
                 })
