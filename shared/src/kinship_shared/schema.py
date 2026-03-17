@@ -459,3 +459,67 @@ class EcologicalEvent(BaseModel):
         default=None,
         description="Reference to a similar past event, e.g. '2021 Klamath drought cascade'",
     )
+
+
+# ---------------------------------------------------------------------------
+# Phase 3-5: Ecosystem state (continuous monitoring)
+# ---------------------------------------------------------------------------
+
+class EcosystemState(BaseModel):
+    """Real-time ecological state vector for a monitored location.
+
+    Phase 3+ type — the foundation for emergent intelligence. When
+    maintained continuously for many ecosystems, cross-location pattern
+    detection becomes possible.
+    """
+
+    id: str = Field(description="Ecosystem identifier, e.g. 'watershed:russian-river'")
+    location: Location
+    timestamp: datetime
+    period_days: int = Field(default=30, description="Lookback window for computed metrics")
+
+    # Hydrological signals
+    streamflow_cfs: Optional[float] = Field(default=None, description="Current streamflow (cubic feet/sec)")
+    streamflow_baseline: Optional[float] = Field(default=None, description="30-year normal for this date")
+    soil_moisture_pct: Optional[float] = Field(default=None, description="Volumetric water content")
+    precipitation_7d_mm: Optional[float] = Field(default=None, description="7-day precipitation total")
+
+    # Biological signals
+    species_richness: Optional[int] = Field(default=None, description="Species count in lookback window")
+    species_baseline: Optional[int] = Field(default=None, description="Expected species count for this date")
+    acoustic_diversity_index: Optional[float] = Field(default=None, description="Acoustic complexity index")
+
+    # Spectral signals
+    ndvi: Optional[float] = Field(default=None, description="Normalized Difference Vegetation Index")
+    ndvi_baseline: Optional[float] = Field(default=None, description="Seasonal NDVI baseline")
+
+    # Climate signals
+    temp_mean_c: Optional[float] = Field(default=None, description="Mean temperature over period")
+    temp_anomaly_c: Optional[float] = Field(default=None, description="Deviation from 30-year normal")
+
+    # Derived metrics
+    deviation_vector: list[float] = Field(
+        default_factory=list,
+        description="Normalized deviation from baseline for each signal (-1 to 1)",
+    )
+    overall_health_score: Optional[float] = Field(
+        default=None,
+        ge=0, le=100,
+        description="Composite ecosystem health score (0-100)",
+    )
+    trend_direction: Optional[Literal["improving", "stable", "declining", "critical"]] = None
+    active_anomalies: list[str] = Field(
+        default_factory=list,
+        description="IDs of currently active EcologicalAnomaly objects",
+    )
+    active_events: list[str] = Field(
+        default_factory=list,
+        description="IDs of currently active EcologicalEvent objects",
+    )
+
+    # Data provenance
+    sources_contributing: list[str] = Field(
+        default_factory=list,
+        description="Adapter IDs currently feeding this state vector",
+    )
+    last_updated: Optional[datetime] = None

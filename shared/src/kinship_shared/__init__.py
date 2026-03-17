@@ -14,6 +14,7 @@ from .schema import (
     EcologicalAnomaly,
     EcologicalEvent,
     EcologicalObservation,
+    EcosystemState,
     Location,
     Provenance,
     Quality,
@@ -43,4 +44,5 @@ __all__ = [
     "observations_to_geojson",
     "EcologicalAnomaly",
     "EcologicalEvent",
+    "EcosystemState",
 ]
