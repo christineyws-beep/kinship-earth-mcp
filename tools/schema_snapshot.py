@@ -105,12 +105,11 @@ ADAPTERS: dict[str, dict[str, Any]] = {
     },
     "xeno_canto": {
         "url": "https://xeno-canto.org/api/3/recordings",
-        "params": {"query": "Turdus migratorius", "page": 1},
+        "params": {"query": 'sp:"Turdus migratorius"', "page": 1},
         "path": "recordings",
         "note": "American Robin recordings (API v3, requires XC_API_KEY)",
         "auth_env": "XC_API_KEY",
-        "auth_header": "Authorization",
-        "auth_prefix": "Bearer ",
+        "auth_param": "key",
     },
     "soilgrids": {
         "url": "https://rest.isric.org/soilgrids/v2.0/properties/query",
@@ -247,6 +246,7 @@ def _fetch_adapter(name: str, config: dict[str, Any], timeout: float = 30) -> di
     headers: dict[str, str] = {"Accept": "application/json"}
 
     # Auth handling
+    params = dict(config.get("params", {}))
     auth_env = config.get("auth_env")
     if auth_env:
         key = os.environ.get(auth_env)
@@ -254,12 +254,16 @@ def _fetch_adapter(name: str, config: dict[str, Any], timeout: float = 30) -> di
             raise EnvironmentError(
                 f"Skipping {name}: env var {auth_env} not set"
             )
-        auth_header = config.get("auth_header", "Authorization")
-        auth_prefix = config.get("auth_prefix", "")
-        headers[auth_header] = f"{auth_prefix}{key}"
+        if config.get("auth_param"):
+            # Pass key as a query parameter
+            params[config["auth_param"]] = key
+        else:
+            auth_header = config.get("auth_header", "Authorization")
+            auth_prefix = config.get("auth_prefix", "")
+            headers[auth_header] = f"{auth_prefix}{key}"
 
     with httpx.Client(timeout=timeout, follow_redirects=True) as client:
-        resp = client.get(config["url"], params=config.get("params", {}), headers=headers)
+        resp = client.get(config["url"], params=params, headers=headers)
         resp.raise_for_status()
         body = resp.json()
 
