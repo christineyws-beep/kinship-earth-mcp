@@ -101,7 +101,7 @@ Store every agent conversation for future memory graph ingestion.
 - [x] Conversation storage schema (who, when, what tools called, what returned, what feedback given)
 - [x] Dual-write to local SQLite (dev) + Supabase/Postgres (prod)
 - [x] Per-message feedback capture (thumbs up/down, correction, annotation)
-- [ ] Conversation replay / export for users
+- [x] Conversation replay / export for users
 - [ ] Privacy controls: per-user opt-in for shared memory, data deletion
 
 ### Milestone 3.3 — Extract Web App Components

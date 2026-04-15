@@ -355,6 +355,117 @@ async def ecology_whats_around_me(
 
 
 @mcp.tool()
+async def ecology_my_history(
+    limit: int = 20,
+    taxon_filter: Optional[str] = None,
+    lat: Optional[float] = None,
+    lon: Optional[float] = None,
+    radius_km: Optional[float] = None,
+) -> dict:
+    """
+    View your past ecological queries.
+
+    Returns your recent query history, optionally filtered by species
+    or location. Useful for picking up where you left off or seeing
+    what you've explored.
+
+    Args:
+        limit: Maximum number of turns to return (default 20).
+        taxon_filter: Filter by scientific name (e.g. 'Delphinus delphis').
+        lat: Filter by latitude (requires lon and radius_km).
+        lon: Filter by longitude.
+        radius_km: Search radius for location filter.
+    """
+    await _ensure_store()
+    if not _store_initialized:
+        return {"turns": [], "message": "Conversation storage not available"}
+
+    if taxon_filter:
+        turns = await _store.get_turns_by_taxon(taxon_filter, limit=limit)
+    elif lat is not None and lon is not None and radius_km:
+        turns = await _store.get_turns_by_location(lat, lon, radius_km, limit=limit)
+    else:
+        # Get recent turns for the current conversation
+        conv_id = _conversation_id or ""
+        if conv_id:
+            turns = await _store.get_conversation(conv_id)
+            turns = turns[-limit:]
+        else:
+            turns = []
+
+    # Collect stats
+    all_taxa = set()
+    all_locations = set()
+    for t in turns:
+        all_taxa.update(t.taxa_mentioned)
+        if t.lat is not None and t.lng is not None:
+            all_locations.add((round(t.lat, 2), round(t.lng, 2)))
+
+    return {
+        "turns": [
+            {
+                "id": t.id,
+                "timestamp": t.timestamp.isoformat(),
+                "tool_name": t.tool_name,
+                "summary": t.tool_result_summary,
+                "location": {"lat": t.lat, "lon": t.lng} if t.lat else None,
+                "taxa": t.taxa_mentioned,
+                "feedback": t.feedback,
+            }
+            for t in turns
+        ],
+        "total_queries": len(turns),
+        "unique_species_queried": len(all_taxa),
+        "unique_locations_queried": len(all_locations),
+    }
+
+
+@mcp.tool()
+async def ecology_my_usage() -> dict:
+    """
+    Check your usage and rate limit status.
+
+    Returns your current query count, daily limit, tier, and
+    stored API keys (names only, not values).
+    """
+    global _auth_initialized
+    try:
+        if not _auth_initialized:
+            await _auth.initialize()
+            _auth_initialized = True
+
+        user_id = os.environ.get("KINSHIP_USER_ID", "default")
+        user = await _auth.get_user(user_id)
+
+        if user:
+            return {
+                "user": {
+                    "id": user.id,
+                    "email": user.email or "(anonymous)",
+                    "tier": user.tier,
+                    "queries_today": user.queries_today,
+                    "queries_limit": user.queries_limit,
+                    "api_keys_configured": list(user.api_keys.keys()),
+                },
+            }
+        else:
+            return {
+                "user": {
+                    "id": user_id,
+                    "email": "(anonymous)",
+                    "tier": "free",
+                    "queries_today": 0,
+                    "queries_limit": 50,
+                    "api_keys_configured": [],
+                },
+                "message": "No user profile found. Queries are not being metered.",
+            }
+    except Exception as e:
+        logger.warning("Failed to get usage: %s", e)
+        return {"error": f"Failed to get usage: {e}"}
+
+
+@mcp.tool()
 async def ecology_set_api_key(
     service: Literal["ebird", "xeno-canto", "neon"],
     api_key: str,
