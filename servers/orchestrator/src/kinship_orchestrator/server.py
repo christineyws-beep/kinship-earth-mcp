@@ -355,6 +355,276 @@ async def ecology_whats_around_me(
 
 
 @mcp.tool()
+async def ecology_biodiversity_assessment(
+    lat: float,
+    lon: float,
+    radius_km: float = 25,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+) -> dict:
+    """
+    Comprehensive biodiversity assessment for a location.
+
+    Chains species search + climate + soil into a structured assessment.
+    Returns species richness, taxonomic diversity, environmental context,
+    and data quality metrics — everything needed for a baseline survey.
+
+    Args:
+        lat: Latitude in decimal degrees.
+        lon: Longitude in decimal degrees (negative = West).
+        radius_km: Search radius in km (default 25).
+        start_date: Start of date range (ISO 8601). Defaults to 90 days ago.
+        end_date: End of date range (ISO 8601). Defaults to today.
+    """
+    from datetime import datetime as dt, timedelta
+
+    if not end_date:
+        end_date = dt.now().strftime("%Y-%m-%d")
+    if not start_date:
+        start_date = (dt.now() - timedelta(days=90)).strftime("%Y-%m-%d")
+
+    search_result, soil_result = await asyncio.gather(
+        run_search(
+            lat=lat, lon=lon, radius_km=radius_km,
+            start_date=start_date, end_date=end_date,
+            include_climate=True, limit=50,
+            obis=_obis, neon=_neon, era5=_era5,
+            inat=_inat, ebird=_ebird,
+        ),
+        _soil.search(SearchParams(lat=lat, lng=lon, radius_km=1, limit=1)),
+    )
+
+    occurrences = search_result.get("species_occurrences", [])
+
+    # Compute derived metrics
+    species_set = set()
+    taxonomic_groups: dict[str, set] = {}
+    quality_dist: dict[int, int] = {}
+    observation_dates = []
+    sources_seen: set[str] = set()
+
+    for occ in occurrences:
+        name = occ.get("scientific_name")
+        if name:
+            species_set.add(name)
+        source = occ.get("source", "obis")
+        sources_seen.add(source)
+        tier = occ.get("quality_tier")
+        if tier is not None:
+            quality_dist[tier] = quality_dist.get(tier, 0) + 1
+        obs_date = occ.get("observed_at", "")[:10]
+        if obs_date:
+            observation_dates.append(obs_date)
+
+    soil_data = {}
+    if soil_result:
+        soil_data = soil_result[0].value if soil_result[0].value else {}
+
+    assessment = {
+        "assessment_type": "biodiversity_assessment",
+        "location": {"lat": lat, "lon": lon, "radius_km": radius_km},
+        "period": {"start": start_date, "end": end_date},
+        "metrics": {
+            "species_richness": len(species_set),
+            "total_observations": len(occurrences),
+            "source_coverage": sorted(sources_seen),
+            "quality_distribution": quality_dist,
+            "temporal_coverage": {
+                "earliest": min(observation_dates) if observation_dates else None,
+                "latest": max(observation_dates) if observation_dates else None,
+            },
+        },
+        "species_list": sorted(species_set),
+        "observations": occurrences,
+        "neon_sites": search_result.get("neon_sites", []),
+        "climate": search_result.get("climate"),
+        "soil": soil_data,
+    }
+
+    asyncio.create_task(_store_turn(
+        "ecology_biodiversity_assessment",
+        {"lat": lat, "lon": lon, "radius_km": radius_km, "start_date": start_date, "end_date": end_date},
+        assessment,
+    ))
+    return assessment
+
+
+@mcp.tool()
+async def ecology_temporal_comparison(
+    lat: float,
+    lon: float,
+    radius_km: float = 50,
+    period_a_start: str = "",
+    period_a_end: str = "",
+    period_b_start: str = "",
+    period_b_end: str = "",
+    scientificname: Optional[str] = None,
+) -> dict:
+    """
+    Compare ecological conditions between two time periods.
+
+    Answers "what changed here?" by running parallel queries for both
+    periods and computing differences in species composition, climate,
+    and observation patterns.
+
+    Args:
+        lat: Latitude in decimal degrees.
+        lon: Longitude in decimal degrees.
+        radius_km: Search radius (default 50 km).
+        period_a_start: Start of period A (ISO 8601, e.g. '2015-01-01').
+        period_a_end: End of period A (e.g. '2018-12-31').
+        period_b_start: Start of period B (e.g. '2021-01-01').
+        period_b_end: End of period B (e.g. '2024-12-31').
+        scientificname: Optional species filter.
+    """
+    if not period_a_start or not period_a_end or not period_b_start or not period_b_end:
+        return {"error": "All four date parameters are required (period_a_start, period_a_end, period_b_start, period_b_end)"}
+
+    result_a, result_b = await asyncio.gather(
+        run_search(
+            scientificname=scientificname, lat=lat, lon=lon, radius_km=radius_km,
+            start_date=period_a_start, end_date=period_a_end,
+            include_climate=True, limit=50,
+            obis=_obis, neon=_neon, era5=_era5,
+            inat=_inat, ebird=_ebird,
+        ),
+        run_search(
+            scientificname=scientificname, lat=lat, lon=lon, radius_km=radius_km,
+            start_date=period_b_start, end_date=period_b_end,
+            include_climate=True, limit=50,
+            obis=_obis, neon=_neon, era5=_era5,
+            inat=_inat, ebird=_ebird,
+        ),
+    )
+
+    # Extract species sets
+    species_a = {occ.get("scientific_name") for occ in result_a.get("species_occurrences", []) if occ.get("scientific_name")}
+    species_b = {occ.get("scientific_name") for occ in result_b.get("species_occurrences", []) if occ.get("scientific_name")}
+
+    # Climate deltas
+    climate_delta = {}
+    climate_a = result_a.get("climate", {})
+    climate_b = result_b.get("climate", {})
+    if climate_a and climate_b:
+        daily_a = climate_a.get("daily", {})
+        daily_b = climate_b.get("daily", {})
+        for var in ["temperature_2m_mean", "precipitation_sum"]:
+            vals_a = daily_a.get(var, [])
+            vals_b = daily_b.get(var, [])
+            if vals_a and vals_b:
+                avg_a = sum(vals_a) / len(vals_a)
+                avg_b = sum(vals_b) / len(vals_b)
+                climate_delta[var] = {
+                    "period_a_avg": round(avg_a, 2),
+                    "period_b_avg": round(avg_b, 2),
+                    "delta": round(avg_b - avg_a, 2),
+                }
+
+    comparison = {
+        "comparison_type": "temporal_comparison",
+        "location": {"lat": lat, "lon": lon, "radius_km": radius_km},
+        "species_filter": scientificname,
+        "period_a": {"start": period_a_start, "end": period_a_end},
+        "period_b": {"start": period_b_start, "end": period_b_end},
+        "deltas": {
+            "species_gained": sorted(species_b - species_a),
+            "species_lost": sorted(species_a - species_b),
+            "species_persistent": sorted(species_a & species_b),
+            "observation_count_a": result_a.get("species_count", 0),
+            "observation_count_b": result_b.get("species_count", 0),
+            "observation_count_change": result_b.get("species_count", 0) - result_a.get("species_count", 0),
+            "climate": climate_delta,
+        },
+        "period_a_data": result_a,
+        "period_b_data": result_b,
+    }
+
+    asyncio.create_task(_store_turn(
+        "ecology_temporal_comparison",
+        {"lat": lat, "lon": lon, "period_a": f"{period_a_start}/{period_a_end}", "period_b": f"{period_b_start}/{period_b_end}"},
+        comparison,
+    ))
+    return comparison
+
+
+@mcp.tool()
+async def ecology_export(
+    format: Literal["csv", "geojson", "markdown", "bibtex"] = "geojson",
+    lat: Optional[float] = None,
+    lon: Optional[float] = None,
+    radius_km: Optional[float] = None,
+    scientificname: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+) -> dict:
+    """
+    Export ecological data in a standard format.
+
+    Runs a search and formats the output as CSV, GeoJSON, Markdown
+    report, or BibTeX citations with proper provenance.
+
+    Args:
+        format: Output format — 'csv', 'geojson', 'markdown', or 'bibtex'.
+        lat: Latitude for geographic search.
+        lon: Longitude for geographic search.
+        radius_km: Search radius in km.
+        scientificname: Species to search for.
+        start_date: Start of date range.
+        end_date: End of date range.
+    """
+    from kinship_shared.export import to_csv, to_geojson, to_markdown, to_bibtex
+
+    # Run search
+    result = await run_search(
+        scientificname=scientificname, lat=lat, lon=lon,
+        radius_km=radius_km, start_date=start_date, end_date=end_date,
+        include_climate=True, limit=50,
+        obis=_obis, neon=_neon, era5=_era5,
+        inat=_inat, ebird=_ebird,
+    )
+
+    observations = result.get("species_occurrences", [])
+    params = {"scientificname": scientificname, "lat": lat, "lon": lon,
+              "radius_km": radius_km, "start_date": start_date, "end_date": end_date}
+    sources = result.get("search_context", {}).get("sources_queried", [])
+
+    if format == "csv":
+        return {"format": "csv", "content": to_csv(observations, params), "record_count": len(observations)}
+    elif format == "geojson":
+        return {"format": "geojson", "content": to_geojson(observations, params), "record_count": len(observations)}
+    elif format == "markdown":
+        return {"format": "markdown", "content": to_markdown(observations, result.get("climate"), sources, params), "record_count": len(observations)}
+    elif format == "bibtex":
+        return {"format": "bibtex", "content": to_bibtex(sources), "source_count": len(sources)}
+    else:
+        return {"error": f"Unknown format: {format}"}
+
+
+@mcp.tool()
+async def ecology_cite(
+    sources: Optional[str] = None,
+) -> dict:
+    """
+    Generate citations for ecological data sources.
+
+    Returns properly formatted citations (BibTeX + APA) for OBIS, NEON,
+    ERA5, and all other data sources. Includes DOIs, access dates, and
+    license info.
+
+    Args:
+        sources: Comma-separated source IDs to cite (e.g. 'obis,era5,neon').
+                 If omitted, returns citations for all available sources.
+    """
+    from kinship_shared.citations import get_citations
+
+    source_list = None
+    if sources:
+        source_list = [s.strip() for s in sources.split(",")]
+
+    return get_citations(source_list)
+
+
+@mcp.tool()
 async def ecology_my_history(
     limit: int = 20,
     taxon_filter: Optional[str] = None,

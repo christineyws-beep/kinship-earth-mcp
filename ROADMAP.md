@@ -57,10 +57,10 @@ MCP prompts let agents invoke curated multi-step workflows with a single call.
 ### Milestone 2.2 — Workflow Composition Tools
 Higher-level tools that chain existing tools into research workflows.
 
-- [ ] `ecology_biodiversity_assessment` — chains search → climate → soil → synthesis for a location
-- [ ] `ecology_temporal_comparison` — "what changed here between date A and date B?"
-- [ ] `ecology_export` — tool that outputs structured CSV, GeoJSON, Markdown report, or BibTeX with DOIs
-- [ ] `ecology_cite` — given a set of observations, produce properly formatted citations
+- [x] `ecology_biodiversity_assessment` — chains search → climate → soil → synthesis for a location
+- [x] `ecology_temporal_comparison` — "what changed here between date A and date B?"
+- [x] `ecology_export` — tool that outputs structured CSV, GeoJSON, Markdown report, or BibTeX with DOIs
+- [x] `ecology_cite` — given a set of observations, produce properly formatted citations
 
 ### Milestone 2.3 — Output Structure for Agent UI
 Help agents render better visualizations without prescribing the UI.
