@@ -23,7 +23,7 @@
 | 4 | `004-workflow-tools.md` | done | 2026-04-19 | 2026-04-15 | Phase 2.2 |
 | 5 | `005-visualization-hints.md` | done | 2026-04-20 | 2026-04-15 | Phase 2.3 |
 | 6 | `006-graph-scaffold.md` | done | 2026-04-21 | 2026-04-15 | Phase 4.1 |
-| 7 | `007-graph-pipeline.md` | ready | 2026-04-22 | — | Phase 4.1 |
+| 7 | `007-graph-pipeline.md` | done | 2026-04-22 | 2026-04-15 | Phase 4.1 |
 | 8 | `008-memory-tools.md` | queued | 2026-04-23 | — | Phase 4.2 (needs spec) |
 | 9 | `009-memory-ranking.md` | queued | 2026-04-24 | — | Phase 4.3 (needs spec) |
 | 10 | `010-integration-test.md` | queued | 2026-04-25 | — | End-to-end (needs spec) |
@@ -37,9 +37,9 @@
 
 ## Inventory
 
-- **Specs ready:** 1
+- **Specs ready:** 0
 - **Specs queued (need writing):** 3
-- **Specs done:** 6
-- **Buffer:** 1 night ahead (CRITICAL: write more specs next session)
+- **Specs done:** 7
+- **Buffer:** 0 nights ahead — ALL SPECS EXECUTED. Write specs 008-010 next session.
 
 > When buffer drops to 2 or fewer, the next interactive session should prioritize writing more specs.

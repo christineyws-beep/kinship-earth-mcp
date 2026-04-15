@@ -40,12 +40,14 @@ from .auth_sqlite import SQLiteAuthManager
 
 from kinship_shared import (
     ConversationTurn,
+    EcologicalGraph,
     SearchParams,
     SQLiteConversationStore,
     run_describe_sources,
     run_get_environmental_context,
     run_search,
 )
+from kinship_shared.graph_extract import EntityExtractor
 
 # ---------------------------------------------------------------------------
 # Server setup
@@ -85,6 +87,11 @@ _auth = SQLiteAuthManager()
 _auth_enabled = os.environ.get("KINSHIP_AUTH_ENABLED", "false").lower() == "true"
 _auth_initialized = False
 
+# Knowledge graph
+_graph = EcologicalGraph()
+_extractor = EntityExtractor()
+_graph_initialized = False
+
 # Lazy-initialize storage on first use
 _store_initialized = False
 
@@ -99,8 +106,18 @@ async def _ensure_store() -> None:
             logger.warning("Failed to initialize conversation store: %s", e)
 
 
+async def _ensure_graph() -> None:
+    global _graph_initialized
+    if not _graph_initialized:
+        try:
+            await _graph.initialize()
+            _graph_initialized = True
+        except Exception as e:
+            logger.warning("Failed to initialize graph: %s", e)
+
+
 async def _store_turn(tool_name: str, params: dict, result: dict) -> None:
-    """Persist a tool invocation. Fire-and-forget — never breaks tools."""
+    """Persist a tool invocation and extract to graph. Fire-and-forget."""
     try:
         await _ensure_store()
         if not _store_initialized:
@@ -145,6 +162,20 @@ async def _store_turn(tool_name: str, params: dict, result: dict) -> None:
             taxa_mentioned=taxa,
         )
         await _store.store_turn(turn)
+
+        # Extract to knowledge graph
+        if isinstance(result, dict):
+            await _ensure_graph()
+            if _graph_initialized:
+                extracted = _extractor.extract_from_turn(turn, result)
+                for entity in extracted.entities:
+                    await _graph.add_entity(entity)
+                for rel in extracted.relationships:
+                    await _graph.add_relationship(rel)
+                for fact in extracted.facts:
+                    await _graph.add_fact(fact)
+                await _graph.save()
+
     except Exception as e:
         logger.warning("Failed to store turn for %s: %s", tool_name, e)
 
@@ -351,6 +382,68 @@ async def ecology_whats_around_me(
         "neon_sites": result.get("neon_sites", []),
         "climate": result.get("climate"),
         "sources_queried": result.get("search_context", {}).get("sources_queried", []),
+    }
+
+
+@mcp.tool()
+async def ecology_graph_stats() -> dict:
+    """
+    Show knowledge graph statistics.
+
+    Returns entity counts, relationship counts, top entities by mention
+    count, and temporal fact counts. Useful for understanding how the
+    ecological knowledge base is growing over time.
+    """
+    await _ensure_graph()
+    if not _graph_initialized:
+        return {"error": "Knowledge graph not available"}
+
+    # Count by type
+    entity_counts: dict[str, int] = {}
+    top_entities: list[dict] = []
+
+    for entity in _graph._entities.values():
+        t = entity.entity_type
+        entity_counts[t] = entity_counts.get(t, 0) + 1
+
+    # Top 10 by mention count
+    sorted_entities = sorted(
+        _graph._entities.values(), key=lambda e: e.mention_count, reverse=True
+    )
+    for entity in sorted_entities[:10]:
+        top_entities.append({
+            "id": entity.id,
+            "name": entity.name,
+            "type": entity.entity_type,
+            "mentions": entity.mention_count,
+        })
+
+    # Relationship counts by type
+    rel_counts: dict[str, int] = {}
+    if _graph._graph is not None:
+        for _, _, data in _graph._graph.edges(data=True):
+            rt = data.get("relationship_type", "unknown")
+            rel_counts[rt] = rel_counts.get(rt, 0) + 1
+
+    # Fact counts
+    current_facts = sum(1 for f in _graph._facts.values() if f.valid_until is None)
+    superseded_facts = sum(1 for f in _graph._facts.values() if f.valid_until is not None)
+
+    return {
+        "entities": {
+            "total": _graph.entity_count(),
+            "by_type": entity_counts,
+        },
+        "relationships": {
+            "total": _graph.relationship_count(),
+            "by_type": rel_counts,
+        },
+        "facts": {
+            "total": _graph.fact_count(),
+            "current": current_facts,
+            "superseded": superseded_facts,
+        },
+        "top_entities": top_entities,
     }
 
 

@@ -23,6 +23,7 @@ from .graph_schema import (
     make_species_id,
     make_user_id,
 )
+from .graph_extract import EntityExtractor, ExtractedGraph
 from .graph_store import EcologicalGraph
 from .summarize import make_human_summary, summarize_search_result
 from .viz import make_climate_chart_hint, make_map_hint, make_visualization_hint
