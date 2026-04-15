@@ -131,10 +131,10 @@ Migrate reusable pieces from `kinship-earth-web` into the MCP platform.
 **Dependency:** Phase 3 (need conversations + identity to feed the graph)
 
 ### Milestone 4.1 — Graph Infrastructure
-- [ ] Evaluate and select graph engine (Graphiti vs. custom Neo4j vs. Memgraph + pgvector)
-- [ ] Design entity ontology: Species, Location, Watershed, Ecosystem, Researcher, Query, Finding, Anomaly
-- [ ] Design relationship types: OBSERVED_AT, INHABITS, DRAINS_TO, CORRELATES_WITH, ASKED_ABOUT, SIMILAR_TO
-- [ ] Temporal edge model (validity windows, fact versioning — "temperature normal was X until 2024, now Y")
+- [x] Evaluate and select graph engine (Graphiti vs. custom Neo4j vs. Memgraph + pgvector)
+- [x] Design entity ontology: Species, Location, Watershed, Ecosystem, Researcher, Query, Finding, Anomaly
+- [x] Design relationship types: OBSERVED_AT, INHABITS, DRAINS_TO, CORRELATES_WITH, ASKED_ABOUT, SIMILAR_TO
+- [x] Temporal edge model (validity windows, fact versioning — "temperature normal was X until 2024, now Y")
 - [ ] Implement graph write pipeline: conversation → entity extraction → graph upsert
 
 ### Milestone 4.2 — Memory-Aware MCP Tools
