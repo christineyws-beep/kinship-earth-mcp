@@ -90,10 +90,10 @@ Help agents render better visualizations without prescribing the UI.
 A thin service layer that wraps the MCP server with auth.
 
 - [ ] OAuth provider integration (Google and/or GitHub)
-- [ ] User identity model (Supabase or Auth0 + Postgres)
+- [x] User identity model (Supabase or Auth0 + Postgres)
 - [ ] Authenticated MCP transport (SSE with auth headers)
-- [ ] Free tier usage metering (queries/day)
-- [ ] BYOK API key vault (user provides their own eBird key, etc.)
+- [x] Free tier usage metering (queries/day)
+- [x] BYOK API key vault (user provides their own eBird key, etc.)
 
 ### Milestone 3.2 — Conversation Persistence
 Store every agent conversation for future memory graph ingestion.

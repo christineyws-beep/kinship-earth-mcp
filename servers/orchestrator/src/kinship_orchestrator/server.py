@@ -36,6 +36,8 @@ from usgs_nwis_mcp.adapter import USGSNWISAdapter
 from xenocanto_mcp.adapter import XenoCantoAdapter
 from soilgrids_mcp.adapter import SoilGridsAdapter
 
+from .auth_sqlite import SQLiteAuthManager
+
 from kinship_shared import (
     ConversationTurn,
     SearchParams,
@@ -77,6 +79,11 @@ _soil = SoilGridsAdapter()
 # Conversation storage (fire-and-forget, never blocks tools)
 _store = SQLiteConversationStore()
 _conversation_id = os.environ.get("KINSHIP_CONVERSATION_ID", "")
+
+# Auth (disabled by default, opt-in via KINSHIP_AUTH_ENABLED=true)
+_auth = SQLiteAuthManager()
+_auth_enabled = os.environ.get("KINSHIP_AUTH_ENABLED", "false").lower() == "true"
+_auth_initialized = False
 
 # Lazy-initialize storage on first use
 _store_initialized = False
@@ -345,6 +352,40 @@ async def ecology_whats_around_me(
         "climate": result.get("climate"),
         "sources_queried": result.get("search_context", {}).get("sources_queried", []),
     }
+
+
+@mcp.tool()
+async def ecology_set_api_key(
+    service: Literal["ebird", "xeno-canto", "neon"],
+    api_key: str,
+) -> dict:
+    """
+    Store your own API key for a data source (BYOK).
+
+    Some data sources (eBird, Xeno-canto) require API keys for full access.
+    Provide your own key, which will be stored locally and used for your
+    queries. Keys are stored in ~/.kinship-earth/users.db.
+
+    Args:
+        service: The data source to set the key for ('ebird', 'xeno-canto', or 'neon').
+        api_key: Your API key for the service.
+    """
+    global _auth_initialized
+    try:
+        if not _auth_initialized:
+            await _auth.initialize()
+            _auth_initialized = True
+
+        user_id = os.environ.get("KINSHIP_USER_ID", "default")
+        user = await _auth.get_user(user_id)
+        if user is None:
+            user = await _auth.create_anonymous_user()
+
+        await _auth.set_api_key(user.id, service, api_key)
+        return {"status": "ok", "service": service, "message": f"API key stored for {service}"}
+    except Exception as e:
+        logger.warning("Failed to store API key: %s", e)
+        return {"error": f"Failed to store API key: {e}"}
 
 
 @mcp.tool()

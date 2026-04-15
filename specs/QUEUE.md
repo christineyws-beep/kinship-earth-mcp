@@ -18,7 +18,7 @@
 | # | Spec File | Status | Target Date | Completed | Notes |
 |---|-----------|--------|-------------|-----------|-------|
 | 1 | `001-conversation-storage.md` | done | 2026-04-16 | 2026-04-15 | Phase 3.2 |
-| 2 | `002-auth-proxy.md` | ready | 2026-04-17 | — | Phase 3.1 |
+| 2 | `002-auth-proxy.md` | done | 2026-04-17 | 2026-04-15 | Phase 3.1 |
 | 3 | `003-auth-integration.md` | ready | 2026-04-18 | — | Phase 3.1 + 3.2 |
 | 4 | `004-workflow-tools.md` | ready | 2026-04-19 | — | Phase 2.2 |
 | 5 | `005-visualization-hints.md` | ready | 2026-04-20 | — | Phase 2.3 |
@@ -37,9 +37,9 @@
 
 ## Inventory
 
-- **Specs ready:** 6
+- **Specs ready:** 5
 - **Specs queued (need writing):** 3
-- **Specs done:** 1
-- **Buffer:** 6 nights ahead
+- **Specs done:** 2
+- **Buffer:** 5 nights ahead
 
 > When buffer drops to 2 or fewer, the next interactive session should prioritize writing more specs.
