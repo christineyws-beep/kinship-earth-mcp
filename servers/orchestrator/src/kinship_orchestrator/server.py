@@ -448,6 +448,301 @@ async def ecology_graph_stats() -> dict:
 
 
 @mcp.tool()
+async def ecology_memory_recall(
+    lat: Optional[float] = None,
+    lon: Optional[float] = None,
+    radius_km: float = 50,
+    scientific_name: Optional[str] = None,
+    depth: int = 2,
+) -> dict:
+    """
+    Recall what the knowledge graph knows about a location or species.
+
+    Searches the ecological memory for entities, relationships, and
+    temporal facts. Returns connected entities, co-occurring species,
+    and historical facts. The graph grows with every query — the more
+    the system is used, the richer the recall.
+
+    Args:
+        lat: Latitude to recall memory for.
+        lon: Longitude to recall memory for.
+        radius_km: Search radius (default 50 km).
+        scientific_name: Species to recall memory for.
+        depth: How many relationship hops to traverse (default 2).
+    """
+    from kinship_shared.graph_schema import make_species_id, make_location_id
+
+    await _ensure_graph()
+    if not _graph_initialized:
+        return {"memory": [], "message": "Knowledge graph not available"}
+
+    results: dict = {"query": {"lat": lat, "lon": lon, "scientific_name": scientific_name}}
+
+    # Species recall
+    if scientific_name:
+        species_id = make_species_id(scientific_name)
+        entity = await _graph.get_entity(species_id)
+        if entity:
+            neighbors = await _graph.get_neighbors(species_id, depth=depth)
+            co_occurring = await _graph.find_co_occurring_species(species_id, min_evidence=1)
+            facts = await _graph.get_current_facts(species_id)
+            results["species"] = {
+                "id": species_id,
+                "name": entity.name,
+                "mentions": entity.mention_count,
+                "neighbors": neighbors.get("neighbors", []),
+                "co_occurring_species": co_occurring,
+                "facts": [f.model_dump(mode="json") for f in facts],
+            }
+        else:
+            results["species"] = {"id": species_id, "found": False, "message": f"No memory of {scientific_name} yet"}
+
+    # Location recall
+    if lat is not None and lon is not None:
+        location_id = make_location_id(lat, lon)
+        entity = await _graph.get_entity(location_id)
+        interest = await _graph.get_location_interest(lat, lon, radius_km)
+        if entity:
+            neighbors = await _graph.get_neighbors(location_id, depth=depth)
+            facts = await _graph.get_current_facts(location_id)
+            results["location"] = {
+                "id": location_id,
+                "mentions": entity.mention_count,
+                "interest": interest,
+                "neighbors": neighbors.get("neighbors", []),
+                "facts": [f.model_dump(mode="json") for f in facts],
+            }
+        else:
+            results["location"] = {"id": location_id, "found": False, "interest": interest}
+
+    results["graph_size"] = {
+        "entities": _graph.entity_count(),
+        "relationships": _graph.relationship_count(),
+        "facts": _graph.fact_count(),
+    }
+
+    return results
+
+
+@mcp.tool()
+async def ecology_memory_store(
+    name: str,
+    description: str,
+    lat: Optional[float] = None,
+    lon: Optional[float] = None,
+    scientific_name: Optional[str] = None,
+    share: bool = False,
+) -> dict:
+    """
+    Explicitly save an insight to the ecological knowledge graph.
+
+    Use this when you discover something worth remembering — a confirmed
+    spawning site, an unusual species observation, a climate correlation.
+    The insight becomes a graph entity that enriches future queries.
+
+    Args:
+        name: Short name (e.g. 'Coho spawning confirmed at Russian River tributary').
+        description: Detailed description of the finding.
+        lat: Latitude (if location-relevant).
+        lon: Longitude (if location-relevant).
+        scientific_name: Species name (if species-relevant).
+        share: If True, this finding is visible to other users (opt-in shared memory).
+    """
+    from kinship_shared.graph_schema import GraphEntity, GraphRelationship, make_species_id, make_location_id
+    import uuid
+
+    await _ensure_graph()
+    if not _graph_initialized:
+        return {"error": "Knowledge graph not available"}
+
+    finding_id = f"finding:{uuid.uuid4()}"
+    user_id = os.environ.get("KINSHIP_USER_ID", "anonymous")
+
+    finding = GraphEntity(
+        id=finding_id,
+        entity_type="finding",
+        name=name,
+        properties={
+            "description": description,
+            "user_id": user_id,
+            "shared": share,
+        },
+    )
+    await _graph.add_entity(finding)
+
+    # Link to location
+    if lat is not None and lon is not None:
+        loc_id = make_location_id(lat, lon)
+        loc_entity = GraphEntity(
+            id=loc_id, entity_type="location",
+            name=f"({lat:.2f}, {lon:.2f})",
+            properties={"lat": lat, "lng": lon},
+        )
+        await _graph.add_entity(loc_entity)
+        await _graph.add_relationship(GraphRelationship(
+            source_id=finding_id, target_id=loc_id,
+            relationship_type="FOUND_IN",
+        ))
+
+    # Link to species
+    if scientific_name:
+        sp_id = make_species_id(scientific_name)
+        sp_entity = GraphEntity(
+            id=sp_id, entity_type="species", name=scientific_name,
+        )
+        await _graph.add_entity(sp_entity)
+        await _graph.add_relationship(GraphRelationship(
+            source_id=finding_id, target_id=sp_id,
+            relationship_type="QUERIED_ABOUT",
+        ))
+
+    await _graph.save()
+
+    return {
+        "status": "ok",
+        "finding_id": finding_id,
+        "name": name,
+        "shared": share,
+        "linked_to": {
+            "location": make_location_id(lat, lon) if lat and lon else None,
+            "species": make_species_id(scientific_name) if scientific_name else None,
+        },
+    }
+
+
+@mcp.tool()
+async def ecology_related_queries(
+    lat: Optional[float] = None,
+    lon: Optional[float] = None,
+    scientific_name: Optional[str] = None,
+    limit: int = 10,
+) -> dict:
+    """
+    Find related past queries from the knowledge graph.
+
+    Shows what other queries have been made about a location or species.
+    Surfaces patterns like "3 researchers queried this watershed last
+    month" or "this species was also searched near 5 other locations."
+
+    Args:
+        lat: Latitude to find related queries for.
+        lon: Longitude to find related queries for.
+        scientific_name: Species to find related queries for.
+        limit: Max related queries to return (default 10).
+    """
+    from kinship_shared.graph_schema import make_species_id, make_location_id
+
+    await _ensure_graph()
+    if not _graph_initialized:
+        return {"related_queries": [], "message": "Knowledge graph not available"}
+
+    target_ids = []
+    if scientific_name:
+        target_ids.append(make_species_id(scientific_name))
+    if lat is not None and lon is not None:
+        target_ids.append(make_location_id(lat, lon))
+
+    related = []
+    researchers = set()
+
+    for target_id in target_ids:
+        rels = await _graph.get_relationships(target_id, rel_type="QUERIED_ABOUT")
+        for rel in rels[:limit]:
+            query_entity = await _graph.get_entity(rel.source_id)
+            if query_entity and query_entity.entity_type == "query":
+                # Find who made the query
+                query_rels = await _graph.get_relationships(rel.source_id, rel_type="QUERIED_BY")
+                for qr in query_rels:
+                    researchers.add(qr.target_id)
+
+                related.append({
+                    "query_id": rel.source_id,
+                    "name": query_entity.name,
+                    "timestamp": query_entity.properties.get("timestamp", ""),
+                    "mentions": query_entity.mention_count,
+                })
+
+    return {
+        "target": {"scientific_name": scientific_name, "lat": lat, "lon": lon},
+        "related_queries": related[:limit],
+        "unique_researchers": len(researchers),
+        "total_related": len(related),
+    }
+
+
+@mcp.tool()
+async def ecology_emerging_patterns(
+    min_mentions: int = 3,
+    limit: int = 10,
+) -> dict:
+    """
+    Surface emerging patterns from the ecological knowledge graph.
+
+    Finds entities with growing mention counts, species with expanding
+    co-occurrence networks, and locations with increasing research
+    interest. These are signals of ecological change or research momentum.
+
+    Args:
+        min_mentions: Minimum mention count to include (default 3).
+        limit: Max patterns to return (default 10).
+    """
+    await _ensure_graph()
+    if not _graph_initialized:
+        return {"patterns": [], "message": "Knowledge graph not available"}
+
+    # Top species by mentions
+    top_species = []
+    for entity in sorted(_graph._entities.values(), key=lambda e: e.mention_count, reverse=True):
+        if entity.entity_type == "species" and entity.mention_count >= min_mentions:
+            co = await _graph.find_co_occurring_species(entity.id, min_evidence=1)
+            top_species.append({
+                "id": entity.id,
+                "name": entity.name,
+                "mentions": entity.mention_count,
+                "co_occurring_species_count": len(co),
+            })
+            if len(top_species) >= limit:
+                break
+
+    # Top locations by mentions
+    top_locations = []
+    for entity in sorted(_graph._entities.values(), key=lambda e: e.mention_count, reverse=True):
+        if entity.entity_type == "location" and entity.mention_count >= min_mentions:
+            top_locations.append({
+                "id": entity.id,
+                "name": entity.name,
+                "mentions": entity.mention_count,
+                "properties": entity.properties,
+            })
+            if len(top_locations) >= limit:
+                break
+
+    # Strongest relationships
+    top_relationships = []
+    if _graph._graph is not None:
+        edges = []
+        for s, t, data in _graph._graph.edges(data=True):
+            edges.append((s, t, data.get("evidence_count", 1), data.get("relationship_type", "")))
+        edges.sort(key=lambda x: x[2], reverse=True)
+        for s, t, count, rtype in edges[:limit]:
+            if count >= min_mentions:
+                top_relationships.append({
+                    "source": s, "target": t,
+                    "type": rtype, "evidence_count": count,
+                })
+
+    return {
+        "top_species": top_species,
+        "top_locations": top_locations,
+        "strongest_relationships": top_relationships,
+        "graph_size": {
+            "entities": _graph.entity_count(),
+            "relationships": _graph.relationship_count(),
+        },
+    }
+
+
+@mcp.tool()
 async def ecology_biodiversity_assessment(
     lat: float,
     lon: float,

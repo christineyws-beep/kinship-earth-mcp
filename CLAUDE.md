@@ -27,10 +27,10 @@ These decisions are blocking or will soon block autonomous progress. Review and 
    - Options: (a) all memory is per-user only, (b) opt-in shared, (c) shared by default with opt-out
    - My recommendation: opt-in shared, per-user by default
 
-4. **kinship-earth-web: archive or keep alive?**
-   - All web app orchestration logic is now duplicated in MCP
-   - Auth/storage concepts have been rebuilt in MCP
-   - Do we archive the web repo, or keep it as a thin client that calls MCP?
+4. **kinship-earth-web: keep as demo client** (DECIDED)
+   - Gut the duplicated orchestration (~300 lines), point at service/ API
+   - Keep Leaflet map + chat UI as a lightweight public demo for non-agent users
+   - Not archiving — becomes the "showroom" while MCP is the "engine"
 
 ### P1 — Needed Within 1-2 Sessions
 

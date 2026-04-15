@@ -140,11 +140,10 @@ Migrate reusable pieces from `kinship-earth-web` into the MCP platform.
 ### Milestone 4.2 — Memory-Aware MCP Tools
 New tools that query the memory graph alongside live data.
 
-- [ ] `ecology_related_queries` — "3 other researchers queried this watershed last month, focusing on salmonid habitat"
-- [ ] `ecology_location_history` — "this location has been queried 47 times; top species of interest: coho salmon, steelhead"
-- [ ] `ecology_emerging_patterns` — "across all users, eBird observations of species X have shifted 50km north over 3 years"
-- [ ] `ecology_memory_store` — agent explicitly saves an insight to the graph ("researcher confirmed coho spawning at this tributary")
-- [ ] `ecology_memory_recall` — retrieve relevant memory nodes for a given location/species/time
+- [x] `ecology_related_queries` — "3 other researchers queried this watershed last month, focusing on salmonid habitat"
+- [x] `ecology_emerging_patterns` — "across all users, growing species/location mention counts and co-occurrence patterns"
+- [x] `ecology_memory_store` — agent explicitly saves an insight to the graph ("researcher confirmed coho spawning at this tributary")
+- [x] `ecology_memory_recall` — retrieve relevant memory nodes for a given location/species/time
 
 ### Milestone 4.3 — Memory-Informed Ranking
 Existing search results get re-ranked based on graph context.
