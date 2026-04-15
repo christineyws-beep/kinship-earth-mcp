@@ -48,11 +48,11 @@
 ### Milestone 2.1 — Prompt Templates & Resources
 MCP prompts let agents invoke curated multi-step workflows with a single call.
 
-- [ ] `ecological_survey` prompt — comprehensive biodiversity + climate + soil report for a location
-- [ ] `species_report` prompt — deep dive on a single species: occurrences, climate correlation, audio, soil
-- [ ] `site_comparison` prompt — structured comparison of 2+ locations across all data sources
-- [ ] `data_export` prompt — guided export in CSV, GeoJSON, Markdown report, or BibTeX
-- [ ] MCP resource: `ecology://sources` — live registry of available data sources and their status
+- [x] `ecological_survey` prompt — comprehensive biodiversity + climate + soil report for a location
+- [x] `species_report` prompt — deep dive on a single species: occurrences, climate correlation, audio, soil
+- [x] `site_comparison` prompt — structured comparison of 2+ locations across all data sources
+- [x] `data_export` prompt — guided export in CSV, GeoJSON, Markdown report, or BibTeX
+- [x] MCP resource: `ecology://sources` — live registry of available data sources and their status
 
 ### Milestone 2.2 — Workflow Composition Tools
 Higher-level tools that chain existing tools into research workflows.

@@ -19,6 +19,7 @@ Run via HTTP:  uv run python -m kinship_orchestrator.server
 
 from __future__ import annotations
 
+import json
 import os
 from typing import Literal, Optional
 
@@ -32,8 +33,10 @@ from ebird_mcp.adapter import EBirdAdapter
 from gbif_mcp.adapter import GBIFAdapter
 from usgs_nwis_mcp.adapter import USGSNWISAdapter
 from xenocanto_mcp.adapter import XenoCantoAdapter
+from soilgrids_mcp.adapter import SoilGridsAdapter
 
 from kinship_shared import (
+    SearchParams,
     run_describe_sources,
     run_get_environmental_context,
     run_search,
@@ -66,6 +69,7 @@ _ebird = EBirdAdapter(api_key=os.environ.get("EBIRD_API_KEY"))
 _gbif = GBIFAdapter()
 _nwis = USGSNWISAdapter()
 _xc = XenoCantoAdapter(api_key=os.environ.get("XC_API_KEY"))
+_soil = SoilGridsAdapter()
 
 
 # ---------------------------------------------------------------------------
@@ -255,6 +259,316 @@ async def ecology_whats_around_me(
         "climate": result.get("climate"),
         "sources_queried": result.get("search_context", {}).get("sources_queried", []),
     }
+
+
+# ---------------------------------------------------------------------------
+# Prompts — curated multi-step workflows for agents
+# ---------------------------------------------------------------------------
+
+
+@mcp.prompt()
+async def ecological_survey(
+    lat: float,
+    lon: float,
+    radius_km: float = 25,
+    start_date: str = "",
+    end_date: str = "",
+) -> str:
+    """
+    Comprehensive biodiversity + climate + soil report for a location.
+
+    Runs a multi-source survey: species observations (OBIS, iNaturalist,
+    eBird), NEON monitoring sites, ERA5 climate, and SoilGrids soil
+    properties. Returns a structured dataset the agent should synthesize
+    into a narrative ecological survey report.
+    """
+    from datetime import datetime, timedelta
+
+    if not end_date:
+        end_date = datetime.now().strftime("%Y-%m-%d")
+    if not start_date:
+        start_date = (datetime.now() - timedelta(days=90)).strftime("%Y-%m-%d")
+
+    search_result = await run_search(
+        lat=lat, lon=lon, radius_km=radius_km,
+        start_date=start_date, end_date=end_date,
+        include_climate=True, limit=30,
+        obis=_obis, neon=_neon, era5=_era5,
+        inat=_inat, ebird=_ebird,
+    )
+
+    soil_result = await _soil.search(SearchParams(lat=lat, lng=lon, radius_km=1, limit=1))
+    soil_data = {}
+    if soil_result:
+        obs = soil_result[0]
+        soil_data = obs.value if obs.value else {}
+
+    survey_data = {
+        "survey_type": "ecological_survey",
+        "location": {"lat": lat, "lon": lon, "radius_km": radius_km},
+        "period": {"start": start_date, "end": end_date},
+        "species_observations": search_result.get("species_occurrences", []),
+        "species_count": search_result.get("species_count", 0),
+        "neon_sites": search_result.get("neon_sites", []),
+        "climate": search_result.get("climate"),
+        "soil": soil_data,
+        "sources_queried": search_result.get("search_context", {}).get("sources_queried", []),
+    }
+
+    return (
+        "You are conducting an ecological survey. Below is data from 9 ecological "
+        "data sources for the requested location and time period. Synthesize this "
+        "into a comprehensive ecological survey report with these sections:\n\n"
+        "1. **Location Overview** — coordinates, nearest monitoring sites, ecosystem type\n"
+        "2. **Biodiversity Summary** — species observed, taxonomic diversity, notable species\n"
+        "3. **Climate Conditions** — temperature, precipitation, wind patterns for the period\n"
+        "4. **Soil Properties** — composition, organic carbon, pH, moisture (if available)\n"
+        "5. **Data Quality Assessment** — source mix, quality tiers, confidence levels\n"
+        "6. **Gaps & Recommendations** — what data is missing, suggested follow-up queries\n\n"
+        "Include specific numbers, dates, and scientific names. Cite data sources.\n\n"
+        f"Survey data:\n```json\n{json.dumps(survey_data, indent=2, default=str)}\n```"
+    )
+
+
+@mcp.prompt()
+async def species_report(
+    scientific_name: str,
+    lat: float = 0,
+    lon: float = 0,
+    radius_km: float = 100,
+) -> str:
+    """
+    Deep dive on a single species: occurrences, climate correlation, audio, soil.
+
+    Searches across all sources for a specific species, optionally scoped to
+    a geographic area. Returns occurrence data, environmental context, and
+    any available audio recordings.
+    """
+    import asyncio
+
+    tasks = {
+        "search": run_search(
+            scientificname=scientific_name,
+            lat=lat if lat else None, lon=lon if lon else None,
+            radius_km=radius_km if lat else None,
+            include_climate=True, limit=30,
+            obis=_obis, neon=_neon, era5=_era5,
+            inat=_inat, ebird=_ebird,
+        ),
+        "audio": _xc.search(SearchParams(taxon=scientific_name, limit=5)),
+    }
+
+    if lat and lon:
+        tasks["soil"] = _soil.search(SearchParams(lat=lat, lng=lon, radius_km=1, limit=1))
+
+    task_keys = list(tasks.keys())
+    results_raw = await asyncio.gather(*tasks.values(), return_exceptions=True)
+    results = {}
+    for key, val in zip(task_keys, results_raw):
+        if isinstance(val, Exception):
+            results[key] = {"error": str(val)}
+        else:
+            results[key] = val
+
+    search_data = results.get("search", {})
+
+    audio_data = []
+    if isinstance(results.get("audio"), list):
+        for obs in results["audio"]:
+            audio_data.append({
+                "id": obs.id,
+                "location": {"lat": obs.location.lat, "lng": obs.location.lng, "country": obs.location.country},
+                "recorded_at": obs.observed_at.isoformat() if obs.observed_at else None,
+                "audio_url": obs.media_url,
+                "quality": obs.quality.grade,
+            })
+
+    soil_data = {}
+    if isinstance(results.get("soil"), list) and results["soil"]:
+        soil_data = results["soil"][0].value or {}
+
+    report_data = {
+        "report_type": "species_report",
+        "species": scientific_name,
+        "search_area": {"lat": lat, "lon": lon, "radius_km": radius_km} if lat else "global",
+        "occurrences": search_data.get("species_occurrences", []) if isinstance(search_data, dict) else [],
+        "occurrence_count": search_data.get("species_count", 0) if isinstance(search_data, dict) else 0,
+        "climate_context": search_data.get("climate") if isinstance(search_data, dict) else None,
+        "soil_context": soil_data,
+        "audio_recordings": audio_data,
+        "neon_sites": search_data.get("neon_sites", []) if isinstance(search_data, dict) else [],
+    }
+
+    return (
+        f"You are writing a species report for **{scientific_name}**. Below is data "
+        "from multiple ecological sources. Synthesize into a species report with:\n\n"
+        "1. **Species Overview** — taxonomy, common name, conservation context\n"
+        "2. **Distribution & Occurrences** — where observed, spatial patterns, habitat\n"
+        "3. **Environmental Associations** — climate conditions at observation sites, "
+        "soil properties, elevation range\n"
+        "4. **Temporal Patterns** — when observed, seasonal trends, recent vs. historical\n"
+        "5. **Audio/Media** — available recordings with links (if any)\n"
+        "6. **Monitoring Infrastructure** — nearby NEON sites for long-term tracking\n"
+        "7. **Data Sources & Citations** — list all contributing sources with provenance\n\n"
+        "Use scientific names and specific data values. Note data quality tiers.\n\n"
+        f"Report data:\n```json\n{json.dumps(report_data, indent=2, default=str)}\n```"
+    )
+
+
+@mcp.prompt()
+async def site_comparison(
+    lat1: float,
+    lon1: float,
+    lat2: float,
+    lon2: float,
+    label1: str = "Site A",
+    label2: str = "Site B",
+    start_date: str = "",
+    end_date: str = "",
+) -> str:
+    """
+    Structured comparison of two locations across all data sources.
+
+    Runs parallel queries for both sites and returns side-by-side data
+    on species, climate, soil, and monitoring infrastructure. The agent
+    should present a comparative analysis.
+    """
+    import asyncio
+    from datetime import datetime, timedelta
+
+    if not end_date:
+        end_date = datetime.now().strftime("%Y-%m-%d")
+    if not start_date:
+        start_date = (datetime.now() - timedelta(days=90)).strftime("%Y-%m-%d")
+
+    search1, search2, soil1, soil2 = await asyncio.gather(
+        run_search(
+            lat=lat1, lon=lon1, radius_km=50,
+            start_date=start_date, end_date=end_date,
+            include_climate=True, limit=20,
+            obis=_obis, neon=_neon, era5=_era5,
+            inat=_inat, ebird=_ebird,
+        ),
+        run_search(
+            lat=lat2, lon=lon2, radius_km=50,
+            start_date=start_date, end_date=end_date,
+            include_climate=True, limit=20,
+            obis=_obis, neon=_neon, era5=_era5,
+            inat=_inat, ebird=_ebird,
+        ),
+        _soil.search(SearchParams(lat=lat1, lng=lon1, radius_km=1, limit=1)),
+        _soil.search(SearchParams(lat=lat2, lng=lon2, radius_km=1, limit=1)),
+    )
+
+    comparison_data = {
+        "comparison_type": "site_comparison",
+        "period": {"start": start_date, "end": end_date},
+        "sites": {
+            label1: {
+                "location": {"lat": lat1, "lon": lon1},
+                "species_count": search1.get("species_count", 0),
+                "species": search1.get("species_occurrences", []),
+                "neon_sites": search1.get("neon_sites", []),
+                "climate": search1.get("climate"),
+                "soil": soil1[0].value if soil1 else {},
+            },
+            label2: {
+                "location": {"lat": lat2, "lon": lon2},
+                "species_count": search2.get("species_count", 0),
+                "species": search2.get("species_occurrences", []),
+                "neon_sites": search2.get("neon_sites", []),
+                "climate": search2.get("climate"),
+                "soil": soil2[0].value if soil2 else {},
+            },
+        },
+    }
+
+    return (
+        f"You are comparing two ecological sites: **{label1}** vs **{label2}**. "
+        "Below is parallel data from multiple sources. Create a structured comparison:\n\n"
+        "1. **Location Context** — coordinates, nearest monitoring sites, ecosystem type for each\n"
+        "2. **Biodiversity Comparison** — species richness, unique vs. shared species, taxonomic composition\n"
+        "3. **Climate Comparison** — temperature, precipitation, seasonality side by side\n"
+        "4. **Soil Comparison** — composition, organic carbon, pH differences\n"
+        "5. **Monitoring Infrastructure** — NEON coverage, data product availability\n"
+        "6. **Key Differences & Similarities** — what distinguishes these sites ecologically?\n"
+        "7. **Research Potential** — what questions could a comparative study address here?\n\n"
+        "Use tables where helpful. Cite data sources.\n\n"
+        f"Comparison data:\n```json\n{json.dumps(comparison_data, indent=2, default=str)}\n```"
+    )
+
+
+@mcp.prompt()
+def data_export(
+    format: Literal["csv", "geojson", "markdown", "bibtex"] = "markdown",
+) -> str:
+    """
+    Guide the agent through exporting ecological data in a specific format.
+
+    This prompt instructs the agent how to format data from prior queries
+    into the requested export format with proper citations and provenance.
+    """
+    format_instructions = {
+        "csv": (
+            "Export the ecological data as a CSV file. Include columns:\n"
+            "id, scientific_name, common_name, lat, lng, observed_at, source, "
+            "quality_tier, license, source_url, relevance_score\n\n"
+            "Add a header comment row with the query parameters and date generated. "
+            "Use the data from the most recent ecology_search or ecological_survey results "
+            "in this conversation."
+        ),
+        "geojson": (
+            "Export the ecological data as a GeoJSON FeatureCollection. Each observation "
+            "becomes a Feature with:\n"
+            "- geometry: Point with [lon, lat] coordinates\n"
+            "- properties: scientific_name, common_name, observed_at, source, quality_tier, "
+            "relevance_score, source_url\n\n"
+            "Include a top-level 'metadata' property with query parameters and date generated. "
+            "Use the data from the most recent ecology_search or ecological_survey results."
+        ),
+        "markdown": (
+            "Export the ecological data as a formatted Markdown report with:\n"
+            "1. **Header** — title, date generated, query parameters\n"
+            "2. **Summary** — key findings, species count, location, time period\n"
+            "3. **Species Table** — markdown table of all observations with key fields\n"
+            "4. **Climate Summary** — key climate metrics if available\n"
+            "5. **Data Sources** — list of all sources with DOIs and citation strings\n"
+            "6. **Methodology** — note that data was federated via Kinship Earth MCP\n\n"
+            "Use the data from the most recent ecology_search or ecological_survey results."
+        ),
+        "bibtex": (
+            "Export citation information as BibTeX entries for all data sources used. "
+            "Include entries for:\n"
+            "- Each data source API (OBIS, NEON, ERA5, eBird, iNaturalist, etc.)\n"
+            "- Any datasets with DOIs from the observation provenance\n"
+            "- The Kinship Earth MCP server itself\n\n"
+            "Use proper BibTeX formatting (@misc, @article, @dataset as appropriate). "
+            "Include DOIs, URLs, access dates, and license information."
+        ),
+    }
+
+    return (
+        f"The user wants to export ecological data in **{format}** format.\n\n"
+        f"{format_instructions[format]}\n\n"
+        "If there is no recent search data in this conversation, first ask the user "
+        "what data they want to export and run the appropriate search."
+    )
+
+
+# ---------------------------------------------------------------------------
+# Resources — live data for agent discovery
+# ---------------------------------------------------------------------------
+
+
+@mcp.resource("ecology://sources")
+async def ecology_sources_resource() -> str:
+    """Live registry of all available ecological data sources and their status."""
+    result = await run_describe_sources(
+        neon=_neon, obis=_obis, era5=_era5,
+        inat=_inat, ebird=_ebird,
+        gbif=_gbif, nwis=_nwis, xc=_xc,
+    )
+    return json.dumps(result, indent=2, default=str)
 
 
 # ---------------------------------------------------------------------------
