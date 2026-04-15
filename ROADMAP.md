@@ -98,9 +98,9 @@ A thin service layer that wraps the MCP server with auth.
 ### Milestone 3.2 — Conversation Persistence
 Store every agent conversation for future memory graph ingestion.
 
-- [ ] Conversation storage schema (who, when, what tools called, what returned, what feedback given)
-- [ ] Dual-write to local SQLite (dev) + Supabase/Postgres (prod)
-- [ ] Per-message feedback capture (thumbs up/down, correction, annotation)
+- [x] Conversation storage schema (who, when, what tools called, what returned, what feedback given)
+- [x] Dual-write to local SQLite (dev) + Supabase/Postgres (prod)
+- [x] Per-message feedback capture (thumbs up/down, correction, annotation)
 - [ ] Conversation replay / export for users
 - [ ] Privacy controls: per-user opt-in for shared memory, data deletion
 

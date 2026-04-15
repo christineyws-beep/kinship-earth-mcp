@@ -19,6 +19,7 @@ Run via HTTP:  uv run python -m kinship_orchestrator.server
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 from typing import Literal, Optional
@@ -36,7 +37,9 @@ from xenocanto_mcp.adapter import XenoCantoAdapter
 from soilgrids_mcp.adapter import SoilGridsAdapter
 
 from kinship_shared import (
+    ConversationTurn,
     SearchParams,
+    SQLiteConversationStore,
     run_describe_sources,
     run_get_environmental_context,
     run_search,
@@ -70,6 +73,77 @@ _gbif = GBIFAdapter()
 _nwis = USGSNWISAdapter()
 _xc = XenoCantoAdapter(api_key=os.environ.get("XC_API_KEY"))
 _soil = SoilGridsAdapter()
+
+# Conversation storage (fire-and-forget, never blocks tools)
+_store = SQLiteConversationStore()
+_conversation_id = os.environ.get("KINSHIP_CONVERSATION_ID", "")
+
+# Lazy-initialize storage on first use
+_store_initialized = False
+
+
+async def _ensure_store() -> None:
+    global _store_initialized
+    if not _store_initialized:
+        try:
+            await _store.initialize()
+            _store_initialized = True
+        except Exception as e:
+            logger.warning("Failed to initialize conversation store: %s", e)
+
+
+async def _store_turn(tool_name: str, params: dict, result: dict) -> None:
+    """Persist a tool invocation. Fire-and-forget — never breaks tools."""
+    try:
+        await _ensure_store()
+        if not _store_initialized:
+            return
+
+        import uuid
+
+        # Extract location from params
+        lat = params.get("lat")
+        lon = params.get("lon") or params.get("lng")
+
+        # Extract taxa from params and results
+        taxa = []
+        if params.get("scientificname"):
+            taxa.append(params["scientificname"])
+        if params.get("scientific_name"):
+            taxa.append(params["scientific_name"])
+        if isinstance(result, dict):
+            for occ in result.get("species_occurrences", [])[:5]:
+                name = occ.get("scientific_name")
+                if name and name not in taxa:
+                    taxa.append(name)
+
+        # Condense result to summary
+        summary = {}
+        if isinstance(result, dict):
+            summary["species_count"] = result.get("species_count", 0)
+            summary["neon_site_count"] = result.get("neon_site_count", 0)
+            summary["climate_included"] = result.get("climate") is not None
+            sources = result.get("search_context", {}).get("sources_queried", [])
+            summary["sources_queried"] = sources
+
+        turn = ConversationTurn(
+            id=str(uuid.uuid4()),
+            conversation_id=_conversation_id or str(uuid.uuid4()),
+            user_id=os.environ.get("KINSHIP_USER_ID"),
+            tool_name=tool_name,
+            tool_params=params,
+            tool_result_summary=summary,
+            lat=lat,
+            lng=lon,
+            taxa_mentioned=taxa,
+        )
+        await _store.store_turn(turn)
+    except Exception as e:
+        logger.warning("Failed to store turn for %s: %s", tool_name, e)
+
+
+import logging
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -106,11 +180,17 @@ async def ecology_get_environmental_context(
         - Nearest NEON field sites (within 200km)
         - Location metadata
     """
-    return await run_get_environmental_context(
+    result = await run_get_environmental_context(
         lat=lat, lon=lon, date=date,
         days_before=days_before, days_after=days_after,
         neon=_neon, era5=_era5,
     )
+    asyncio.create_task(_store_turn(
+        "ecology_get_environmental_context",
+        {"lat": lat, "lon": lon, "date": date, "days_before": days_before, "days_after": days_after},
+        result,
+    ))
+    return result
 
 
 @mcp.tool()
@@ -169,6 +249,12 @@ async def ecology_search(
         occurrences = result.get("species_occurrences", [])
         result["species_occurrences_geojson"] = observations_to_geojson(occurrences)
 
+    asyncio.create_task(_store_turn(
+        "ecology_search",
+        {"scientificname": scientificname, "lat": lat, "lon": lon, "radius_km": radius_km,
+         "start_date": start_date, "end_date": end_date, "limit": limit},
+        result,
+    ))
     return result
 
 
@@ -259,6 +345,33 @@ async def ecology_whats_around_me(
         "climate": result.get("climate"),
         "sources_queried": result.get("search_context", {}).get("sources_queried", []),
     }
+
+
+@mcp.tool()
+async def ecology_feedback(
+    turn_id: str,
+    feedback: str,
+) -> dict:
+    """
+    Provide feedback on a previous query result.
+
+    Attaches feedback to a stored conversation turn. Use 'helpful',
+    'not_helpful', or free-text feedback. This helps improve data
+    quality and ranking over time.
+
+    Args:
+        turn_id: The ID of the conversation turn to provide feedback on.
+        feedback: Feedback text — 'helpful', 'not_helpful', or free text.
+    """
+    await _ensure_store()
+    if not _store_initialized:
+        return {"error": "Conversation storage not available"}
+
+    found = await _store.add_feedback(turn_id, feedback)
+    if found:
+        return {"status": "ok", "turn_id": turn_id, "feedback": feedback}
+    else:
+        return {"error": f"Turn {turn_id} not found"}
 
 
 # ---------------------------------------------------------------------------

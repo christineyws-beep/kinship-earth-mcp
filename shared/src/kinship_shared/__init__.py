@@ -9,6 +9,8 @@ from .ecology_tools import (
 from .geojson import observations_to_geojson
 from .ranking import rank_observations, score_observation
 from .retry import http_get_with_retry
+from .storage import ConversationStore, ConversationTurn
+from .storage_sqlite import SQLiteConversationStore
 from .schema import (
     AdapterCapabilities,
     EcologicalAnomaly,
@@ -45,4 +47,7 @@ __all__ = [
     "EcologicalAnomaly",
     "EcologicalEvent",
     "EcosystemState",
+    "ConversationTurn",
+    "ConversationStore",
+    "SQLiteConversationStore",
 ]
