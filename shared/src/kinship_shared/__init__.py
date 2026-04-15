@@ -13,6 +13,7 @@ from .storage import ConversationStore, ConversationTurn
 from .citations import get_bibtex, get_citations
 from .export import to_bibtex, to_csv, to_geojson, to_markdown
 from .summarize import make_human_summary, summarize_search_result
+from .viz import make_climate_chart_hint, make_map_hint, make_visualization_hint
 from .storage_sqlite import SQLiteConversationStore
 from .schema import (
     AdapterCapabilities,

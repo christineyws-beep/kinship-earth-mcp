@@ -65,9 +65,9 @@ Higher-level tools that chain existing tools into research workflows.
 ### Milestone 2.3 — Output Structure for Agent UI
 Help agents render better visualizations without prescribing the UI.
 
-- [ ] Add `visualization_hint` field to all tool responses (e.g., `"map"`, `"timeseries"`, `"comparison_table"`, `"species_gallery"`)
-- [ ] Add `map_data` structured field with GeoJSON + suggested bounds + layer groupings
-- [ ] Add `chart_data` structured field with labeled axes, series, and suggested chart type
+- [x] Add `visualization_hint` field to all tool responses (e.g., `"map"`, `"timeseries"`, `"comparison_table"`, `"species_gallery"`)
+- [x] Add `map_data` structured field with GeoJSON + suggested bounds + layer groupings
+- [x] Add `chart_data` structured field with labeled axes, series, and suggested chart type
 - [ ] Document output schema for agent/client developers
 
 ### Phase 2 Definition of Done
