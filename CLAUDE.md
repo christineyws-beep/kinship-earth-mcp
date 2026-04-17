@@ -119,10 +119,15 @@ uv run --package kinship-orchestrator pytest servers/orchestrator/tests/ shared/
 - Phase 4.1: Graph scaffold — entity ontology, graph store, extraction pipeline (DONE)
 
 ### In Progress
-- Phase 4.2: Memory-aware MCP tools (needs specs 008-010)
-- Phase 3.3: Web app migration (needs Christine's decision on archive vs. thin client)
+- Phase 4.3: "You might also want to know" suggestions (partial)
+- Phase 5: Ecosystem intelligence (next phase)
+
+### Decided
+- Web app stays as demo client, points at service/ API
+- Supabase for auth
+- Opt-in shared memory, per-user by default
 
 ### Server Stats
-- **13 tools**, **4 prompts**, **1 resource**
-- **~65 tests** across all new modules
-- Tracking issues: #5 (done), #6 (done), #7 (in progress), #8 (in progress), #10 (done)
+- **17 tools**, **4 prompts**, **1 resource**
+- **~103 tests** across all modules (all passing)
+- Tracking issues: #5 (done), #6 (done), #7 (done), #8 (done), #9 (done), #10 (done)

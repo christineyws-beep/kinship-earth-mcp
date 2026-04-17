@@ -148,8 +148,8 @@ New tools that query the memory graph alongside live data.
 ### Milestone 4.3 — Memory-Informed Ranking
 Existing search results get re-ranked based on graph context.
 
-- [ ] Add memory_relevance component to federated ranking score
-- [ ] Weight observations higher if the location/species has active research interest
+- [x] Add memory_relevance component to federated ranking score
+- [x] Weight observations higher if the location/species has active research interest
 - [ ] Surface "you might also want to know" connections from the graph
 - [ ] A/B test: memory-informed vs. baseline ranking (measure user feedback signals)
 
