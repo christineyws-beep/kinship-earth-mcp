@@ -89,9 +89,9 @@ Help agents render better visualizations without prescribing the UI.
 ### Milestone 3.1 — Authenticated MCP Proxy
 A thin service layer that wraps the MCP server with auth.
 
-- [ ] OAuth provider integration (Google and/or GitHub)
+- [x] OAuth provider integration (Google and/or GitHub)
 - [x] User identity model (Supabase or Auth0 + Postgres)
-- [ ] Authenticated MCP transport (SSE with auth headers)
+- [x] Authenticated MCP transport (SSE with auth headers)
 - [x] Free tier usage metering (queries/day)
 - [x] BYOK API key vault (user provides their own eBird key, etc.)
 

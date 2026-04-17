@@ -25,7 +25,7 @@
 | 6 | `006-graph-scaffold.md` | done | 2026-04-21 | 2026-04-15 | Phase 4.1 |
 | 7 | `007-graph-pipeline.md` | done | 2026-04-22 | 2026-04-15 | Phase 4.1 |
 | 8 | `008-memory-tools.md` | done | 2026-04-16 | 2026-04-15 | Phase 4.2 |
-| 9 | `009-supabase-proxy.md` | ready | 2026-04-16 | — | Phase 3.1 + 3.3 |
+| 9 | `009-supabase-proxy.md` | done | 2026-04-16 | 2026-04-15 | Phase 3.1 + 3.3 |
 | 10 | `010-memory-ranking.md` | ready | 2026-04-16 | — | Phase 4.3 + integration |
 
 ### Status Key
@@ -37,9 +37,9 @@
 
 ## Inventory
 
-- **Specs ready:** 2
+- **Specs ready:** 1
 - **Specs queued (need writing):** 0
-- **Specs done:** 8
-- **Buffer:** 2 sessions ahead
+- **Specs done:** 9
+- **Buffer:** 1 session ahead
 
 > When buffer drops to 2 or fewer, the next interactive session should prioritize writing more specs.
