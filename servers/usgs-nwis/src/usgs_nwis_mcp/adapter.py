@@ -121,10 +121,15 @@ class USGSNWISAdapter(EcologicalAdapter):
         if site_id in self._site_cache:
             return self._site_cache[site_id]
 
+        # The monitoring-locations endpoint requires monitoring_location_number
+        # (the bare number like "01646500"), not the prefixed monitoring_location_id.
+        bare_number = site_id.removeprefix("USGS-")
+        query_params = {"monitoring_location_number": bare_number, "limit": 1, "f": "json"}
+
         resp = await http_get_with_retry(
             client,
             f"{BASE_URL}/collections/monitoring-locations/items",
-            params={"monitoring_location_id": site_id, "limit": 1, "f": "json"},
+            params=query_params,
         )
         if resp.status_code != 200:
             return None
