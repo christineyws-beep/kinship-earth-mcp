@@ -185,7 +185,6 @@ async def ecology_describe_sources() -> dict:
     )
 
 
-# DRAFT: citizen-facing discovery tool (pending full eBird + iNaturalist validation)
 @mcp.tool()
 async def ecology_whats_around_me(
     lat: float,

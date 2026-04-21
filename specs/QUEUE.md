@@ -3,7 +3,10 @@
 *Pick the next spec. Complete it or explicitly pause it. One at a time.*
 
 ## Done
-(none yet)
+
+| # | Spec | Date | Notes |
+|---|------|------|-------|
+| 001 | USGS NWIS hardening | 2026-04-21 | 7→19 tests, fixed site_id search bug |
 
 ## Ready (in priority order)
 
