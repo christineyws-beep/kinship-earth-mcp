@@ -3,6 +3,7 @@ Kinship Earth API — FastAPI application.
 
 Authenticated proxy for the Kinship Earth MCP server. Provides:
 - REST endpoints for non-MCP clients (web app demo)
+- Remote MCP endpoint at /mcp (Streamable HTTP transport)
 - Health check with graph stats
 - Supabase auth (when configured) or anonymous access
 - Rate limiting (50 queries/day free tier)
@@ -63,3 +64,10 @@ app.add_middleware(
 
 app.include_router(health_router)
 app.include_router(api_router)
+
+# Mount the MCP server at /mcp for remote Streamable HTTP access.
+# This allows Claude Desktop, claude.ai, and any MCP client to connect
+# directly via URL without installing anything locally.
+from kinship_orchestrator.server import mcp as mcp_server
+
+app.mount("/mcp", mcp_server.streamable_http_app())
