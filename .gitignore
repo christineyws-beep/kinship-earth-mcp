@@ -32,8 +32,8 @@ Thumbs.db
 # MCP
 .mcp.json
 
-# Claude Code (local dev context)
-CLAUDE.md
+# Claude Code local settings (not the project CLAUDE.md)
+.claude/
 
 # Leftover test copies
 Testing/
