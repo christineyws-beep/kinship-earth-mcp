@@ -315,6 +315,7 @@ async def ecology_describe_sources() -> dict:
         neon=_neon, obis=_obis, era5=_era5,
         inat=_inat, ebird=_ebird,
         gbif=_gbif, nwis=_nwis, xc=_xc,
+        soilgrids=_soil,
     )
 
 
@@ -1717,6 +1718,7 @@ async def ecology_sources_resource() -> str:
         neon=_neon, obis=_obis, era5=_era5,
         inat=_inat, ebird=_ebird,
         gbif=_gbif, nwis=_nwis, xc=_xc,
+        soilgrids=_soil,
     )
     return json.dumps(result, indent=2, default=str)
 
