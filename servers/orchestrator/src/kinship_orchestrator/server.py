@@ -450,6 +450,9 @@ async def ecology_graph_stats() -> dict:
 # Ecosystem monitoring tools
 # ---------------------------------------------------------------------------
 
+from kinship_shared.anomaly_detect import run_anomaly_detection
+from kinship_shared.anomaly_graph import anomaly_to_graph_entities
+from kinship_shared.baselines import compute_baselines_from_era5, compute_baselines_from_usgs
 from kinship_shared.monitoring import MonitoringRegistry, MonitoringSite
 from kinship_shared.state_builder import build_ecosystem_state
 
@@ -590,6 +593,80 @@ async def ecology_monitor_site(
                 "trend": latest.trend_direction if latest else None,
             })
         return {"sites": site_list, "count": len(site_list)}
+
+
+@mcp.tool()
+async def ecology_check_anomalies(
+    lat: float,
+    lon: float,
+    severity_min: Literal["info", "warning", "critical"] = "info",
+) -> dict:
+    """
+    Check for ecological anomalies at a location.
+
+    Runs the anomaly detection pipeline: fetches current ecosystem state,
+    computes baselines, and identifies deviations in temperature, streamflow,
+    species composition, and phenology.
+
+    Args:
+        lat: Latitude in decimal degrees.
+        lon: Longitude in decimal degrees.
+        severity_min: Minimum severity to return ('info', 'warning', 'critical').
+    """
+    from kinship_shared.schema import Location
+
+    location = Location(lat=lat, lng=lon)
+    site_id = f"location:{lat:.2f}_{lon:.2f}"
+
+    # Build ecosystem state
+    state = await build_ecosystem_state(
+        site_id=site_id, location=location,
+        era5_adapter=_era5, usgs_adapter=_nwis,
+        ebird_adapter=_ebird if getattr(_ebird, '_api_key', None) else None,
+        gbif_adapter=_gbif,
+    )
+
+    # Compute baselines
+    from datetime import datetime as dt, timezone as tz
+    now = dt.now(tz.utc)
+    baseline = await compute_baselines_from_era5(_era5, lat, lon, now)
+
+    # Run detection
+    anomalies = run_anomaly_detection(
+        location=location, baseline=baseline, state=state,
+    )
+
+    # Filter by severity
+    severity_order = {"info": 0, "warning": 1, "critical": 2}
+    min_level = severity_order.get(severity_min, 0)
+    filtered = [a for a in anomalies if severity_order.get(a.severity, 0) >= min_level]
+
+    # Wire into graph
+    await _ensure_graph()
+    if _graph_initialized:
+        for anomaly in filtered:
+            entities, rels = anomaly_to_graph_entities(anomaly)
+            for e in entities:
+                await _graph.add_entity(e)
+            for r in rels:
+                await _graph.add_relationship(r)
+        if filtered:
+            await _graph.save()
+
+    result = {
+        "location": {"lat": lat, "lon": lon},
+        "anomaly_count": len(filtered),
+        "anomalies": [a.model_dump(mode="json") for a in filtered],
+        "ecosystem_state_summary": {
+            "health_score": state.overall_health_score,
+            "trend": state.trend_direction,
+            "sources": state.sources_contributing,
+        },
+        "visualization": {"primary": "dashboard", "description": f"Anomaly check for ({lat}, {lon})"},
+    }
+
+    asyncio.create_task(_store_turn("ecology_check_anomalies", {"lat": lat, "lon": lon}, result))
+    return result
 
 
 @mcp.tool()

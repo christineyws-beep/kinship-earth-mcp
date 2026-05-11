@@ -25,6 +25,8 @@ from .graph_schema import (
 )
 from .graph_extract import EntityExtractor, ExtractedGraph
 from .graph_store import EcologicalGraph
+from .anomaly_detect import run_anomaly_detection
+from .anomaly_graph import anomaly_to_graph_entities
 from .baselines import BaselineValues, compute_deviation, compute_health_score, classify_trend
 from .monitoring import MonitoringRegistry, MonitoringSite
 from .state_builder import build_ecosystem_state
