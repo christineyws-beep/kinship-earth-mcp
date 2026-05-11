@@ -1,38 +1,49 @@
-# Spec Queue — Kinship Earth MCP
+# Spec Queue — Autonomous Nightly Sessions
 
-*Pick the next spec. Complete it or explicitly pause it. One at a time.*
+> This file is the source of truth for what the nightly autonomous session should work on.
+> Each session reads this file, picks the next `ready` spec, executes it, and marks it `done`.
 
-## Done
+## How It Works
 
-| # | Spec | Date | Notes |
-|---|------|------|-------|
-| 001 | USGS NWIS hardening | 2026-04-21 | 7→19 tests, fixed site_id search bug |
+1. Session starts, reads this file
+2. Finds the first spec with status `ready`
+3. Reads that spec file for detailed instructions
+4. Executes the spec: build, test, commit, push
+5. Updates this file: marks spec as `done`, adds completion notes
+6. Opens a PR or pushes to the feature branch
+7. Writes a burn-down summary as a commit message
 
-## Ready (in priority order)
+## Queue Status
 
-| # | Spec | Repo | Est | Status |
-|---|------|------|-----|--------|
-| 001 | [USGS NWIS test hardening + orchestrator integration](001-usgs-nwis-hardening.md) | mcp | 1-2h | Ready |
-| 002 | [ecology_whats_around_me finalization](002-whats-around-me.md) | mcp | 1-2h | Ready |
-| 003 | [Schema evolution: Phase 1C fields](003-schema-evolution.md) | mcp | 1h | Ready |
-| 004 | [eBird adapter validation](004-ebird-validation.md) | mcp | 1h | Ready (needs API key) |
-| 005 | [Orchestrator reliability: timeouts + retry](005-orchestrator-reliability.md) | mcp | 1-2h | Ready |
-| 006 | [Community launch prep](006-community-launch.md) | mcp | 2h | Ready |
-| 007 | [Test coverage gap audit](007-test-coverage-audit.md) | mcp | 1-2h | Ready |
-| 008 | [Adapter response normalization audit](008-normalization-audit.md) | mcp | 1-2h | Ready |
-| 009 | [Source registry + ecology_describe_sources refresh](009-source-registry.md) | mcp | 1-2h | Ready |
-| 010 | [Phase 2 prep: subscribe() + streaming types](010-phase2-streaming-prep.md) | mcp | 2-3h | Ready (after 003) |
+| # | Spec File | Status | Target Date | Completed | Notes |
+|---|-----------|--------|-------------|-----------|-------|
+| 1 | `001-conversation-storage.md` | done | 2026-04-16 | 2026-04-15 | Phase 3.2 |
+| 2 | `002-auth-proxy.md` | done | 2026-04-17 | 2026-04-15 | Phase 3.1 |
+| 3 | `003-auth-integration.md` | done | 2026-04-18 | 2026-04-15 | Phase 3.1 + 3.2 |
+| 4 | `004-workflow-tools.md` | done | 2026-04-19 | 2026-04-15 | Phase 2.2 |
+| 5 | `005-visualization-hints.md` | done | 2026-04-20 | 2026-04-15 | Phase 2.3 |
+| 6 | `006-graph-scaffold.md` | done | 2026-04-21 | 2026-04-15 | Phase 4.1 |
+| 7 | `007-graph-pipeline.md` | done | 2026-04-22 | 2026-04-15 | Phase 4.1 |
+| 8 | `008-memory-tools.md` | done | 2026-04-16 | 2026-04-15 | Phase 4.2 |
+| 9 | `009-supabase-proxy.md` | done | 2026-04-16 | 2026-04-15 | Phase 3.1 + 3.3 |
+| 10 | `010-memory-ranking.md` | done | 2026-04-16 | 2026-04-15 | Phase 4.3 + integration |
+| 11 | `011-ecosystem-state.md` | done | 2026-05-12 | 2026-05-11 | Phase 5.1 |
+| 12 | `012-anomaly-detection.md` | done | 2026-05-13 | 2026-05-11 | Phase 5.2 |
+| 13 | `013-event-synthesis.md` | ready | 2026-05-14 | | Phase 5.3 |
+| 14 | `014-new-data-sources.md` | ready | 2026-05-15 | | Phase 5.4 |
 
-## Blocked
+### Status Key
+- `ready` — spec is written, detailed, and executable autonomously
+- `queued` — placeholder, spec not yet written (session should skip and flag)
+- `in_progress` — currently being worked on
+- `done` — completed, committed, pushed
+- `blocked` — cannot proceed, see notes
 
-| # | Spec | Blocker |
-|---|------|---------|
-| 004 | eBird validation | Christine needs to register for eBird API key |
+## Inventory
 
-## Notes
+- **Specs ready:** 2
+- **Specs queued (need writing):** 0
+- **Specs done:** 12
+- **Buffer:** 3 specs ready, 11 done
 
-- Specs 001-005 are Phase 1C (hardening). Do these first.
-- Spec 006 is Phase 1D (community launch). Can overlap with 001-005.
-- Specs 007-009 are quality/consistency work. Good for burndowns.
-- Spec 010 is Phase 2 prep. Do after 003 (schema evolution).
-- Web app specs (RCL Sessions 2-4) live in the kinship-earth-web repo, not here.
+> When buffer drops to 2 or fewer, the next interactive session should prioritize writing more specs.

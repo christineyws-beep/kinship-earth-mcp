@@ -1,0 +1,15 @@
+.venv/
+.git/
+.pytest_cache/
+__pycache__/
+*.pyc
+.env
+*.egg-info/
+examples/
+walkthroughs/
+specs/
+STRATEGY.md
+ROADMAP.md
+CLAUDE.md
+CONTRIBUTING.md
+TESTING.md

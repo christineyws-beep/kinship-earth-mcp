@@ -1,154 +1,133 @@
-# CLAUDE.md — Kinship Earth MCP
+# Kinship Earth MCP — Development Notes
 
-## Project Overview
+## Session Ritual (TPM / Chief of Staff)
+- **Start of session:** Review progress against ROADMAP.md and specs/QUEUE.md. Report: what phase/milestone we're in, what's on track, what's at risk, what's blocked. Present the **Decisions Needed** list below. Keep us accountable against the timeline.
+- **During session:** Track deliverables against milestone checklists. Flag scope creep or distractions.
+- **End of session:** Summarize what was completed, update ROADMAP.md checkboxes and specs/QUEUE.md status, note blockers, state next priorities. Report spec buffer ("X specs ready, Y nights of runway").
 
-Ecological intelligence MCP server — a unified API that makes ecological data queryable by AI agents. One query can combine data from multiple scientific sources into a single coherent response.
+## Decisions Needed From Christine
 
-Public repo: `christinebuilds/kinship-earth-mcp`
+These decisions are blocking or will soon block autonomous progress. Review and decide at your convenience — I'll incorporate your answers into the next specs.
 
-## Stack
+### P0 — Blocking Next Specs
 
-- **Language:** Python 3.12+
-- **Framework:** FastMCP
-- **Package manager:** uv
-- **Deploy:** Railway (prod + staging)
-- **Tests:** pytest (hitting real APIs)
+1. **Auth provider: Supabase vs Auth0 vs Clerk?**
+   - Web app used Supabase. Stick with it for consistency, or switch?
+   - Affects: spec for OAuth flow, user management, conversation storage prod backend
+   - My recommendation: Supabase (you already have it, it's cheaper, it does auth + DB + storage)
+
+2. **Pricing model: free tier limit?**
+   - Current default: 50 queries/day free tier. Is that right?
+   - Do we want a "pro" tier? What does it unlock?
+   - Affects: rate limiting logic, BYOK key management
+
+3. **Shared memory: opt-in or opt-out?**
+   - When a user queries "dolphins near Woods Hole," should that contribute to a shared knowledge graph that other users can benefit from?
+   - Privacy implications for indigenous land data (CARE principles)
+   - Options: (a) all memory is per-user only, (b) opt-in shared, (c) shared by default with opt-out
+   - My recommendation: opt-in shared, per-user by default
+
+4. **kinship-earth-web: keep as demo client** (DECIDED)
+   - Gut the duplicated orchestration (~300 lines), point at service/ API
+   - Keep Leaflet map + chat UI as a lightweight public demo for non-agent users
+   - Not archiving — becomes the "showroom" while MCP is the "engine"
+
+### P1 — Needed Within 1-2 Sessions
+
+5. **Domain/deployment: where does the authenticated MCP proxy live?**
+   - Railway (current web app host)? Fly.io? Vercel edge functions?
+   - Need this for prod Supabase integration and SSE transport
+
+6. **Graph engine scale-up threshold:**
+   - Currently using networkx + SQLite (good to ~100K entities)
+   - At what scale do we migrate to Neo4j or Graphiti?
+   - Or: do we just scale SQLite until it breaks?
+
+7. **What ecological questions should the memory graph prioritize?**
+   - "What researchers are working on this watershed?"
+   - "Has this species range shifted over time?"
+   - "What locations have unusual recent activity?"
+   - Helps me prioritize which memory tools to build first
+
+### P2 — Future Planning
+
+8. **Additional data sources priority order:**
+   - Movebank (animal tracking), FLUXNET (carbon flux), Wildlife Insights (camera traps), Copernicus Land (satellite)
+   - Which matters most for your users?
+
+9. **Target user personas:**
+   - Academic researchers? Land managers? Citizen scientists? All three?
+   - Affects: tool naming, default parameters, prompt templates
+
+## Autonomous Session Protocol
+
+When starting an autonomous session (no human present):
+
+1. Read `specs/QUEUE.md` — find the first spec with status `ready`
+2. Read the spec file — it contains everything: what to build, what to test, what to commit
+3. **Execute the spec exactly as written** — create files, modify files, write tests
+4. **Run all tests** — both new tests from the spec AND existing tests (validation/offline only)
+5. **Commit with the template** from the spec, push to the working branch
+6. **Update specs/QUEUE.md** — mark the spec as `done`, add completion date
+7. **Update ROADMAP.md** — check off completed items
+8. **Check spec buffer** — if 2 or fewer specs remain `ready`, note this in commit message so the next interactive session knows to write more specs
+
+### If a spec is blocked:
+- Mark it as `blocked` in QUEUE.md with a note explaining why
+- Move to the next `ready` spec
+- Do NOT skip queued (unwritten) specs — stop and flag
+
+### Branch strategy:
+- Work on branch `claude/mcp-chat-integration-8Tpu4`
+- Push after each spec completion
+- Do not create PRs autonomously — the human will review and merge
 
 ## Architecture
+- Monorepo: `shared/` (schema, ranking, adapters), `servers/` (one per data source + orchestrator), `launcher/`
+- Framework: FastMCP (Python)
+- Schema: `EcologicalObservation` in `shared/src/kinship_shared/schema.py` — Darwin Core-aligned
+- All adapters implement `EcologicalAdapter` interface from `shared/src/kinship_shared/adapter.py`
+- Orchestrator tools live in `shared/src/kinship_shared/ecology_tools.py`, server in `servers/orchestrator/`
+- Conversation storage: `shared/src/kinship_shared/storage*.py`
+- Knowledge graph: `shared/src/kinship_shared/graph*.py`
+- Auth: `servers/orchestrator/src/kinship_orchestrator/auth*.py`
 
-10 adapters (each in `servers/`):
+## Key Docs
+- `STRATEGY.md` — Vision, architecture, competitive moat, key decisions
+- `ROADMAP.md` — 5-phase plan with milestones and checklists
+- `specs/QUEUE.md` — Ordered spec queue for autonomous sessions
+- `specs/001-*.md` through `specs/007-*.md` — Detailed build specs
 
-| Adapter | Data |
-|---------|------|
-| NEON | 81 US ecological observatory sites |
-| OBIS | 168M+ marine species records |
-| ERA5 | Global climate data from 1940 |
-| iNaturalist | Community species observations |
-| eBird | Bird observations worldwide |
-| USGS NWIS | US water data (streamflow, groundwater) |
-| GBIF | Global biodiversity records |
-| Xeno-canto | Bird/wildlife sound recordings |
-| SoilGrids | Global soil property maps |
-| Orchestrator | Combines adapters into unified queries |
-
-Shared utilities live in `shared/`.
-
-## Key Files
-
-- `STRATEGY.md` — Vision, architecture, differentiators, principles
-- `ROADMAP.md` — Phase plan with checkboxes
-- `specs/QUEUE.md` — What's done, what's next
-- `specs/001-*.md` through `specs/010-*.md` — Detailed build specs
-
-## Commands
-
+## Testing
 ```bash
-# Install dependencies
-uv sync
+# Full test suite (requires network for API tests)
+uv run --package kinship-orchestrator pytest servers/ shared/tests/ -v
 
-# Run all tests
-uv run pytest servers/ -v
-
-# Run a specific adapter's tests
-uv run pytest servers/usgs-nwis/tests/ -v
-
-# Run a specific server locally
-uv run --package kinship-orchestrator python -m kinship_orchestrator.server
-
-# Run launcher
-uv run --package kinship-earth-launcher python -m kinship_earth_launcher --list
+# Offline-only tests (always runnable)
+uv run --package kinship-orchestrator pytest servers/orchestrator/tests/ shared/tests/ -v -k "not (climate or dolphin or cetac or wind_river or woods_hole or parallel or cross_persona or marine or reachable or coordinates or geographic or bird_survey or bird_data or catalog or nonexistent or empty_area or bogus)"
 ```
 
-## Deploy
+## Current Status (Updated 2026-04-15)
 
-Railway hosts both prod and staging environments. Always push to both `main` and `staging` branches when deploying.
+### Completed
+- Phase 1: 9-source federation (DONE)
+- Phase 2.1: Prompt templates + ecology://sources resource (DONE)
+- Phase 2.2: Workflow tools — biodiversity assessment, temporal comparison, export, cite (DONE)
+- Phase 2.3: Visualization hints — map, timeseries, gallery, auto-select (DONE)
+- Phase 3.1: Auth — user model, rate limiting, BYOK keys (DONE, needs OAuth flow)
+- Phase 3.2: Conversation storage — SQLite, feedback, history (DONE, needs Supabase)
+- Phase 4.1: Graph scaffold — entity ontology, graph store, extraction pipeline (DONE)
 
-## Data Export Formats
+### In Progress
+- Phase 4.3: "You might also want to know" suggestions (partial)
+- Phase 5: Ecosystem intelligence (next phase)
 
-CSV, GeoJSON, Markdown, BibTeX
+### Decided
+- Web app stays as demo client, points at service/ API
+- Supabase for auth
+- Opt-in shared memory, per-user by default
 
----
-
-## Session Ritual
-
-### On Session Start
-1. Read this file + `specs/QUEUE.md` to understand current state
-2. Check `git status` and `git log --oneline -5` for recent changes
-3. Identify the next spec to execute from QUEUE.md
-4. Confirm the plan with Christine before starting (unless autonomous protocol applies)
-
-### On Session End
-1. Run tests: `uv run pytest servers/ -v`
-2. Update `specs/QUEUE.md` — mark completed specs, note blockers
-3. Update `ROADMAP.md` checkboxes if milestones were hit
-4. Commit with descriptive message
-5. Note any decisions made or blockers found
-
-### During Work
-- One spec at a time. Complete it or explicitly pause it.
-- Commit after each completed step within a spec.
-- Run tests before and after every change.
-- If a spec reveals unexpected complexity, stop and flag it.
-
----
-
-## Decisions Needed
-
-These require Christine's input before proceeding:
-
-1. **eBird API key** — Need to register and get key to validate adapter end-to-end
-2. **PyPI publication** — Ready to publish? Or just prep the metadata?
-3. **Custom domain** — kinshipearth.org? kinship-earth.dev? Something else?
-4. **Anthropic account funding** — Live demo needs funded API key
-5. **TDWG 2026 abstract** — Submit? (Deadline TBD, conference Sep 21-25 in Oslo)
-6. **First community partner** — Point Blue? Audubon chapter? Other?
-
----
-
-## Autonomous Protocol
-
-Work that can be done without asking:
-
-### Always Safe (Do It)
-- Fix failing tests
-- Update documentation to match code
-- Pin dependencies to SHA
-- Fix linting / type errors
-- Add test coverage for existing code
-- Update QUEUE.md status
-- Schema snapshot checks
-
-### Ask First
-- New adapter (even if researched)
-- Schema changes (even backwards-compatible)
-- New dependencies
-- Anything that changes the public API surface
-- Push to PyPI
-- Send emails or post content
-- Spend money (API keys, domains, hosting changes)
-
-### Never
-- Expose API keys in code or conversation
-- Commit .env files
-- Force push
-- Delete adapters or tests
-- Modify CARE/sovereignty-related code without explicit review
-- Scrape, infer, or reverse-engineer Traditional Ecological Knowledge
-
----
-
-## Safety Rules
-
-- Never expose API keys in code or conversation
-- Scan for secrets before every commit
-- Pin dependencies to SHA where possible
-- No `.env` files committed — use Railway environment variables
-- Vet all new packages before adding
-
-## Working With This Repo
-
-Christine is a product manager learning to code. When making changes:
-- Explain what you changed and why in plain English
-- One step at a time — test between each change
-- Update this file or README if architecture changes
-- Use comprehension checkpoints: explain what was built so Christine understands, not just approves
+### Server Stats
+- **17 tools**, **4 prompts**, **1 resource**
+- **~103 tests** across all modules (all passing)
+- Tracking issues: #5 (done), #6 (done), #7 (done), #8 (done), #9 (done), #10 (done)

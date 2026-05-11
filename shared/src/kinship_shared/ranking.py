@@ -23,12 +23,15 @@ from .schema import EcologicalObservation, SearchParams, SearchRelevance
 def score_observation(
     obs: EcologicalObservation,
     params: SearchParams,
+    memory_relevance: float | None = None,
 ) -> SearchRelevance:
     """
     Score an observation against search parameters.
 
     Returns a SearchRelevance with component scores and a composite.
-    Components are weighted: geo (0.35), taxon (0.30), temporal (0.15), quality (0.20).
+
+    Without memory: geo (0.35), taxon (0.30), temporal (0.15), quality (0.20).
+    With memory:    geo (0.30), taxon (0.25), temporal (0.15), quality (0.15), memory (0.15).
     """
     geo_km = None
     geo_score = 1.0
@@ -76,12 +79,22 @@ def score_observation(
     explanation_parts.append(f"tier-{tier}")
 
     # --- Composite ---
-    composite = (
-        0.35 * geo_score
-        + 0.30 * taxon_score
-        + 0.15 * temporal_score
-        + 0.20 * quality_score
-    )
+    if memory_relevance is not None and memory_relevance > 0:
+        composite = (
+            0.30 * geo_score
+            + 0.25 * taxon_score
+            + 0.15 * temporal_score
+            + 0.15 * quality_score
+            + 0.15 * memory_relevance
+        )
+        explanation_parts.append(f"memory={memory_relevance:.2f}")
+    else:
+        composite = (
+            0.35 * geo_score
+            + 0.30 * taxon_score
+            + 0.15 * temporal_score
+            + 0.20 * quality_score
+        )
 
     return SearchRelevance(
         score=round(composite, 3),
@@ -148,6 +161,40 @@ def _taxon_match_score(query_name: str, taxon) -> float:
         return 0.9
 
     return 0.0
+
+
+def compute_memory_relevance(
+    obs: EcologicalObservation,
+    graph,
+) -> float:
+    """Compute memory relevance score (0-1) from knowledge graph.
+
+    Based on how often the species and location have been mentioned
+    in past queries. Returns 0.0 if graph is empty or entity not found.
+    """
+    if graph is None or graph.entity_count() == 0:
+        return 0.0
+
+    from .graph_schema import make_species_id, make_location_id
+
+    score = 0.0
+    components = 0
+
+    if obs.taxon and obs.taxon.scientific_name:
+        species_id = make_species_id(obs.taxon.scientific_name)
+        entity = graph._entities.get(species_id)
+        if entity:
+            score += min(1.0, math.log1p(entity.mention_count) / 5.0)
+            components += 1
+
+    if obs.location.lat is not None and obs.location.lng is not None:
+        loc_id = make_location_id(obs.location.lat, obs.location.lng)
+        entity = graph._entities.get(loc_id)
+        if entity:
+            score += min(1.0, math.log1p(entity.mention_count) / 5.0)
+            components += 1
+
+    return round(score / max(components, 1), 3)
 
 
 def _haversine_km(lat1: float, lng1: float, lat2: float, lng2: float) -> float:

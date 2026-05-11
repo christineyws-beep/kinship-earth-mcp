@@ -1,123 +1,164 @@
-# STRATEGY.md — Kinship Earth MCP
+# Kinship Earth — Technical Strategy
 
-## What This Is
+> Last updated: 2026-04-15
 
-Ecological intelligence middleware. A unified MCP server that makes ecological data queryable by AI agents. One query can combine data from NEON, OBIS, ERA5, eBird, iNaturalist, GBIF, USGS NWIS, Xeno-canto, and SoilGrids into a single coherent response.
+## Vision
 
-Public repo: `christinebuilds/kinship-earth-mcp`
+Kinship Earth is an **ecological memory system** — a living knowledge graph that gets smarter every time a researcher, land manager, student, or AI agent asks a question about the natural world.
 
-## Why It Matters
+Today we federate 9 ecological APIs into a unified intelligence layer. Tomorrow, every conversation compounds into a shared graph of ecological understanding that no single dataset, tool, or institution could produce alone.
 
-No single ecological API gives you a complete picture. A researcher asking "what were the conditions when dolphins were spotted near Woods Hole?" needs marine occurrence data (OBIS), climate context (ERA5), and monitoring site metadata (NEON) — three separate APIs with different schemas, auth models, and query patterns.
+The product is not a web app. The product is the intelligence layer — consumed by Claude, Cursor, Jupyter, QGIS, and whatever agentic interfaces emerge next.
 
-Kinship Earth normalizes all of this into a Darwin Core-aligned schema (`EcologicalObservation`) and exposes it through MCP tools that any AI agent can call. The orchestrator handles cross-source queries so the agent (or human) just asks a question.
+---
 
-## Vision Arc
+## Core Thesis
 
-The long-term vision is documented in [Voices of the Living World](../notes/projects/kinship-earth/concepts/voices-of-the-living-world.md). The short version:
+1. **AI agents will generate UIs on the fly.** Maps, charts, dashboards, and reports will be produced dynamically by agents in response to specific questions. Building a fixed web app for visualization is building on sand.
 
-1. **Query Layer** (now) — Make ecological data queryable by AI agents and curious humans
-2. **Monitoring Agents** (2026 H2) — AI agents that continuously watch specific ecosystems and generate alerts
-3. **Signal Translation** (2027) — Interpret raw ecological signals across modalities (acoustic, chemical, spectral, hydrological)
-4. **Ecological Voice** (2028) — Ecosystems speak through sustained, data-grounded narratives
-5. **Participatory Governance** (2029+) — Ecosystems participate in decisions through guardians informed by agents
+2. **The durable moat is the intelligence layer + memory graph.** Public APIs are commodities. Unified schema, cross-source ranking, provenance tracking, and emergent ecological memory are not.
 
-We are in Phase 1. Phase 2 prep is underway.
+3. **Conversations are training data.** Every query a researcher makes — "what species are near this watershed?", "how has temperature changed here since 2020?" — creates nodes and edges in an ecological knowledge graph. Cross-user patterns emerge that no individual could see.
+
+4. **Identity enables memory.** Without auth, every session starts from zero. With identity, we build persistent context per user and per location, and compound intelligence across the community.
+
+---
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────┐
-│  AI Agent (Claude Desktop, CLI, Web)    │
-└─────────────────┬───────────────────────┘
-                  │ MCP (stdio or SSE)
-┌─────────────────▼───────────────────────┐
-│  Orchestrator                            │
-│  ecology_get_environmental_context       │
-│  ecology_search                          │
-│  ecology_describe_sources                │
-│  ecology_whats_around_me (DRAFT)         │
-└──┬──────┬──────┬──────┬──────┬──────┬───┘
-   │      │      │      │      │      │
-   ▼      ▼      ▼      ▼      ▼      ▼
- NEON   OBIS   ERA5  eBird  iNat   GBIF
-                       │      │      │
-                       ▼      ▼      ▼
-                     USGS  Xeno-  Soil
-                     NWIS  canto  Grids
+┌─────────────────────────────────────────────────────────┐
+│                    CLIENT LAYER                         │
+│  Claude Chat · Claude Code · Cursor · Jupyter · QGIS   │
+│  (Agents generate UI — maps, charts, reports — on fly)  │
+└────────────────────────┬────────────────────────────────┘
+                         │ MCP Protocol
+┌────────────────────────▼────────────────────────────────┐
+│              MEMORY & GRAPH LAYER (new)                  │
+│                                                          │
+│  Conversation → Entity/Relationship Extraction           │
+│  Temporal Fact Tracking (validity windows)                │
+│  Cross-User Pattern Emergence                            │
+│  Location Memory ("what's been asked about this place?") │
+│  Ecological Relationship Graph (species ↔ habitat ↔      │
+│    climate ↔ watershed ↔ researcher)                     │
+│                                                          │
+│  Tools:                                                  │
+│    ecology_related_queries — "others asked about..."     │
+│    ecology_location_history — "this place over time"     │
+│    ecology_emerging_patterns — "cross-user signals"      │
+│    ecology_memory_store — persist conversation insights  │
+│    ecology_memory_recall — retrieve relevant memory      │
+│                                                          │
+│  Stack: Graphiti / Neo4j / pgvector                      │
+└────────────────────────┬────────────────────────────────┘
+                         │
+┌────────────────────────▼────────────────────────────────┐
+│            MCP INTELLIGENCE LAYER (exists)                │
+│                                                          │
+│  9-Source Federation                                     │
+│  ├── NEON (81 US sites, 180+ data products)              │
+│  ├── OBIS (168M+ marine records)                         │
+│  ├── ERA5 (global climate, 1940–present)                 │
+│  ├── eBird (1.5B+ bird observations)                     │
+│  ├── iNaturalist (200M+ all-taxa observations)           │
+│  ├── GBIF (2.8B+ occurrence records)                     │
+│  ├── Xeno-canto (1M+ bird audio recordings)              │
+│  ├── USGS NWIS (13,500+ US stream gauges)                │
+│  └── SoilGrids (global soil, 250m resolution)            │
+│                                                          │
+│  Unified Schema (Darwin Core–aligned)                    │
+│  Federated Ranking (geo × taxon × temporal × quality)    │
+│  Provenance & CARE Principles                            │
+│  GeoJSON Export                                          │
+│  MCP Prompt Templates (new)                              │
+│  Workflow Compositions (new)                             │
+└────────────────────────┬────────────────────────────────┘
+                         │
+┌────────────────────────▼────────────────────────────────┐
+│             AUTH & PERSISTENCE LAYER (new)                │
+│                                                          │
+│  OAuth (Google/GitHub) — user identity                   │
+│  Conversation Storage — raw material for memory graph    │
+│  Feedback Capture — human signal on what matters         │
+│  Usage Metering — free tier + BYOK API keys              │
+│  API Key Vault — secure storage for eBird, etc.          │
+│                                                          │
+│  Stack: Supabase (auth + storage) or Auth0 + Postgres    │
+└──────────────────────────────────────────────────────────┘
 ```
 
-### Key Design Decisions
+---
 
-| Decision | Choice | Why |
-|----------|--------|-----|
-| Schema | Darwin Core-aligned `EcologicalObservation` | Industry standard for biodiversity data; interop with GBIF, OBIS, iDigBio |
-| Transport | MCP (stdio + SSE) | Native to Claude; composable with other MCP servers |
-| Monorepo | One repo, many packages | Each adapter is independently installable but shares schema + utilities |
-| Package manager | uv | Fast, deterministic, workspace support |
-| No database (Phase 1) | Direct API pass-through | Keeps it simple; caching + persistence is Phase 2 (pgvector) |
-| Quality tiers | Tier 1 (research-grade) / Tier 2 (community-validated) | Researchers need to know what they can cite |
+## What We Keep From kinship-earth-web
 
-### Shared Layer
+The web app prototype (FastAPI + vanilla JS, ~7,800 lines) validated key ideas. We **extract** the following into the MCP platform and **retire** the web app as a standalone product:
 
-- `shared/ecological_schema.py` — `EcologicalObservation`, `Location`, `Provenance`, `SignalModality`
-- `shared/ranking.py` — Relevance scoring across heterogeneous results
-- Each adapter normalizes its API's response into `EcologicalObservation`
+### Extract and integrate
+| Component | Why it matters |
+|---|---|
+| Google OAuth + Supabase auth | Identity is prerequisite for memory |
+| Conversation persistence (SQLite + Supabase) | Raw material for the memory graph |
+| Per-message feedback widget | Human signal for graph edge weighting |
+| Usage metering + BYOK key management | Business model infrastructure |
+| Data export (CSV, GeoJSON, Markdown, BibTeX) | Add as MCP tools, not web-only features |
 
-### Data Sources (10 adapters)
+### Retire (already in MCP or agents will replace)
+| Component | Why |
+|---|---|
+| `_run_search()` / `_run_env_context()` orchestration | Duplicates MCP orchestrator (~300 lines) |
+| Tool definitions + multi-source fan-out | Exact copy of MCP logic |
+| Result normalization + scoring | Uses `kinship_shared` already |
+| Leaflet map rendering | Agents generate maps dynamically via artifacts |
+| SSE streaming UI with source badges | Agent UIs will handle streaming natively |
+| Marketing/vision static pages | Move to a simple landing page or docs site |
 
-| Adapter | Coverage | Records | Auth | Status |
-|---------|----------|---------|------|--------|
-| NEON | 81 US sites, 20 ecoclimatic domains | 180+ data products | None | Production |
-| OBIS | Global oceans | 168M+ occurrences | None | Production |
-| ERA5 | Global, hourly, 1940-present | ~25km resolution | None | Production |
-| iNaturalist | Global community observations | 190M+ observations | None | Production |
-| eBird | Global bird observations | 1.7B+ records | API key | Production |
-| GBIF | Global biodiversity | 2.8B+ occurrences | None | Production |
-| USGS NWIS | US water (stream gauges, groundwater) | Real-time + historical | None | Production |
-| Xeno-canto | Bird/wildlife audio | 1M+ recordings | API key | Production |
-| SoilGrids | Global soil properties | 250m resolution | None | Production |
-| Orchestrator | Combines all above | Cross-source queries | None | Production |
+---
 
-## Differentiators
+## Competitive Moat
 
-1. **Cross-source intelligence** — No other tool combines NEON + OBIS + ERA5 + eBird + iNat + GBIF + USGS + Xeno-canto + SoilGrids into unified queries
-2. **Darwin Core alignment** — Results are interoperable with the broader biodiversity data ecosystem
-3. **Full provenance** — Every result includes DOIs, citation strings, license info, and links to original source
-4. **MCP-native** — Designed for AI agents, not just human-facing APIs
-5. **Open source** — MIT license, open data, open methodology
+| Layer | Defensibility | Status |
+|---|---|---|
+| **Unified Schema** | Medium — hard to replicate well, but technically possible | Built |
+| **9-Source Federation** | Medium — adapter pattern makes this achievable but labor-intensive | Built |
+| **Federated Ranking** | Medium — domain expertise encoded in weights and scoring | Built |
+| **Memory Graph** | **High** — network effect, every user makes it smarter | Not built |
+| **Conversation Corpus** | **High** — proprietary dataset of ecological questions + answers | Partially built (web app) |
+| **Cross-User Emergence** | **Very High** — patterns only visible across many researchers' queries | Not built |
 
-## Competitive Landscape
+The memory graph is the moat. Everything else is the foundation that makes it possible.
 
-- **Individual APIs** (GBIF, eBird, iNat) — Single-source, no cross-source intelligence
-- **Google Earth Engine** — Powerful but not AI-agent-accessible, steep learning curve
-- **Microsoft Planetary Computer** — Satellite-focused, no MCP interface
-- **Map of Life** — Species-focused, no climate or hydrology integration
+---
 
-Kinship Earth's moat is the *combination* of sources under a unified schema with MCP access. No one else is building ecological middleware for AI agents.
+## Key Technical Decisions
 
-## Audiences
+### Why MCP, not a REST API?
+- MCP is the native protocol for AI agents. Claude, Cursor, Windsurf, and others speak it natively.
+- Tools are self-describing — agents discover capabilities without documentation.
+- Composable — agents chain tools, inject context, and adapt to the question.
+- REST is for apps. MCP is for agents. We're building for agents.
 
-1. **Researchers** — Ecologists, conservation biologists, environmental scientists who need cross-source data
-2. **AI agent builders** — Developers building ecological reasoning into Claude, GPT, or custom agents
-3. **Citizen scientists** — Curious humans who want to know "what's around me?"
-4. **Conservation orgs** — Point Blue, Audubon chapters, land trusts needing data for decisions
+### Why not build our own UI?
+- Agent-generated UI will surpass static dashboards within months, not years.
+- Claude artifacts already render React, Leaflet maps, D3 charts, and interactive components inline.
+- Every hour spent on frontend is an hour not spent on the intelligence layer.
+- If we need a public-facing experience, a thin client calling MCP is sufficient.
 
-## Key Risks
+### Why a memory graph, not just vector search?
+- Vector search finds similar content. Graphs find **relationships**.
+- "This watershed was studied by 3 researchers last month" is a graph query, not a similarity search.
+- Temporal validity (facts that change over time) requires graph edges with time windows.
+- Emergent patterns (species range shifts, phenological mismatches) are subgraph patterns.
+- We'll use both: pgvector for semantic retrieval, graph for relationship reasoning.
 
-| Risk | Mitigation |
-|------|-----------|
-| API rate limits / downtime | Graceful degradation per-adapter; caching in Phase 2 |
-| Schema drift in upstream APIs | Schema snapshot tool detects field changes automatically |
-| Adoption chicken-and-egg | Free demo tier on web app; PyPI for frictionless install |
-| Sustainability / funding | Open-source core; Researcher tier ($15/mo) for persistent features |
-| Data sovereignty (Indigenous knowledge) | CARE Principles in schema from day one; never scrape/infer TEK |
+---
 
-## Principles
+## Risk Register
 
-1. **Kinship, not dominion.** Relationship infrastructure, not monitoring tools.
-2. **The AI doesn't speak for nature. It helps guardians listen.** Interpretation is human-accountable.
-3. **Data sovereignty from day one.** CARE Principles built in, not bolted on.
-4. **Open source, open data, open methodology.** Proprietary ecosystem agents are suspect.
-5. **Separation of observation and advocacy.** The agent observes; guardians decide.
-6. **Never scrape, infer, or reverse-engineer TEK.** Indigenous knowledge on Indigenous terms, or not at all.
+| Risk | Impact | Mitigation |
+|---|---|---|
+| MCP protocol evolves rapidly | Medium | Adapter pattern isolates protocol changes; FastMCP handles most |
+| Upstream APIs change schemas | Medium | Schema snapshot tool already monitors; adapters absorb changes |
+| Memory graph cold-start | High | Seed with existing web app conversations; offer immediate value without memory via federation layer |
+| Privacy/CARE compliance for shared memory | High | Per-user memory by default; opt-in shared memory; CARE principles already in schema |
+| Agent UI generation not mature enough | Low | Trajectory is clear; MCP tools work even without rich UI |

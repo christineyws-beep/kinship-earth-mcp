@@ -15,6 +15,7 @@ from typing import Optional
 
 from .ranking import score_observation
 from .schema import SearchParams
+from .viz import make_climate_chart_hint, make_visualization_hint
 
 logger = logging.getLogger(__name__)
 
@@ -75,6 +76,22 @@ async def run_get_environmental_context(
         for obs in neon_sites
     ]
 
+    climate_data = {
+        "source": "ERA5 (ECMWF) via Open-Meteo",
+        "resolution": "~25km grid, daily aggregation",
+        "location_resolved": {
+            "lat": era5_raw.get("latitude"),
+            "lon": era5_raw.get("longitude"),
+            "elevation_m": era5_raw.get("elevation"),
+        },
+        "daily": era5_raw.get("daily", {}),
+        "units": era5_raw.get("daily_units", {}),
+        "provenance": {
+            "doi": "10.24381/cds.adbb2d47",
+            "license": "CC-BY-4.0",
+        },
+    }
+
     return {
         "query": {
             "lat": lat,
@@ -82,24 +99,11 @@ async def run_get_environmental_context(
             "focal_date": date,
             "climate_window": {"start": start, "end": end},
         },
-        "climate": {
-            "source": "ERA5 (ECMWF) via Open-Meteo",
-            "resolution": "~25km grid, daily aggregation",
-            "location_resolved": {
-                "lat": era5_raw.get("latitude"),
-                "lon": era5_raw.get("longitude"),
-                "elevation_m": era5_raw.get("elevation"),
-            },
-            "daily": era5_raw.get("daily", {}),
-            "units": era5_raw.get("daily_units", {}),
-            "provenance": {
-                "doi": "10.24381/cds.adbb2d47",
-                "license": "CC-BY-4.0",
-            },
-        },
+        "climate": climate_data,
         "nearby_neon_sites": nearby_neon,
         "nearby_neon_count": len(nearby_neon),
         "data_sources_used": ["era5", "neonscience"],
+        "visualization": make_climate_chart_hint(climate_data),
     }
 
 
@@ -313,6 +317,7 @@ async def run_search(
         "neon_site_count": len(neon_sites),
         "climate": climate,
         "search_context": search_context,
+        "visualization": make_visualization_hint(all_occurrences, neon_sites, climate),
     }
 
 
