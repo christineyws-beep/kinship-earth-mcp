@@ -27,6 +27,10 @@
 | 8 | `008-memory-tools.md` | done | 2026-04-16 | 2026-04-15 | Phase 4.2 |
 | 9 | `009-supabase-proxy.md` | done | 2026-04-16 | 2026-04-15 | Phase 3.1 + 3.3 |
 | 10 | `010-memory-ranking.md` | done | 2026-04-16 | 2026-04-15 | Phase 4.3 + integration |
+| 11 | `011-ecosystem-state.md` | ready | 2026-05-12 | | Phase 5.1 |
+| 12 | `012-anomaly-detection.md` | ready | 2026-05-13 | | Phase 5.2 |
+| 13 | `013-event-synthesis.md` | ready | 2026-05-14 | | Phase 5.3 |
+| 14 | `014-new-data-sources.md` | ready | 2026-05-15 | | Phase 5.4 |
 
 ### Status Key
 - `ready` — spec is written, detailed, and executable autonomously
@@ -37,9 +41,9 @@
 
 ## Inventory
 
-- **Specs ready:** 0
+- **Specs ready:** 4
 - **Specs queued (need writing):** 0
 - **Specs done:** 10
-- **Buffer:** 0 — ALL 10 SPECS COMPLETE. Write Phase 5 specs next.
+- **Buffer:** 4 specs ready, 10 done
 
 > When buffer drops to 2 or fewer, the next interactive session should prioritize writing more specs.
