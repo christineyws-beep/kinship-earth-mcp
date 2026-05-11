@@ -446,6 +446,152 @@ async def ecology_graph_stats() -> dict:
     }
 
 
+# ---------------------------------------------------------------------------
+# Ecosystem monitoring tools
+# ---------------------------------------------------------------------------
+
+from kinship_shared.monitoring import MonitoringRegistry, MonitoringSite
+from kinship_shared.state_builder import build_ecosystem_state
+
+_monitoring = MonitoringRegistry()
+_monitoring_initialized = False
+
+
+async def _ensure_monitoring() -> None:
+    global _monitoring_initialized
+    if not _monitoring_initialized:
+        try:
+            await _monitoring.initialize()
+            _monitoring_initialized = True
+        except Exception as e:
+            logger.warning("Failed to initialize monitoring: %s", e)
+
+
+@mcp.tool()
+async def ecology_ecosystem_state(
+    lat: float,
+    lon: float,
+    site_name: Optional[str] = None,
+    period_days: int = 30,
+) -> dict:
+    """
+    Get the current ecosystem state for a location.
+
+    Computes a multi-signal state vector combining climate (ERA5),
+    hydrology (USGS), and biodiversity data. Returns health score,
+    deviation from baseline, and trend direction.
+
+    Args:
+        lat: Latitude in decimal degrees.
+        lon: Longitude in decimal degrees.
+        site_name: Optional name to register this as a monitored site.
+        period_days: Lookback window in days (default 30).
+    """
+    from kinship_shared.schema import Location
+
+    await _ensure_monitoring()
+
+    site_id = f"location:{lat:.2f}_{lon:.2f}"
+    location = Location(lat=lat, lng=lon)
+
+    # Get historical health scores for trend if site is monitored
+    recent_scores: list[float] = []
+    if _monitoring_initialized:
+        history = await _monitoring.get_state_history(site_id, limit=10)
+        recent_scores = [s.overall_health_score for s in history if s.overall_health_score is not None]
+
+    state = await build_ecosystem_state(
+        site_id=site_id,
+        location=location,
+        era5_adapter=_era5,
+        usgs_adapter=_nwis,
+        ebird_adapter=_ebird if getattr(_ebird, '_api_key', None) else None,
+        gbif_adapter=_gbif,
+        period_days=period_days,
+        recent_health_scores=recent_scores,
+    )
+
+    # Store the state
+    if _monitoring_initialized:
+        await _monitoring.store_state(state)
+
+    # Auto-register as monitoring site if named
+    if site_name and _monitoring_initialized:
+        site = await _monitoring.get_site(site_id)
+        if not site:
+            await _monitoring.add_site(MonitoringSite(
+                site_id=site_id, name=site_name, location=location,
+            ))
+
+    result = state.model_dump(mode="json")
+    result["visualization"] = {"primary": "dashboard", "description": f"Ecosystem state for ({lat}, {lon})"}
+
+    asyncio.create_task(_store_turn(
+        "ecology_ecosystem_state",
+        {"lat": lat, "lon": lon, "period_days": period_days},
+        result,
+    ))
+    return result
+
+
+@mcp.tool()
+async def ecology_monitor_site(
+    action: Literal["add", "remove", "list"] = "list",
+    lat: Optional[float] = None,
+    lon: Optional[float] = None,
+    site_name: Optional[str] = None,
+    site_id: Optional[str] = None,
+) -> dict:
+    """
+    Manage monitored ecosystem sites.
+
+    Args:
+        action: 'add' to register, 'remove' to stop monitoring, 'list' to show all.
+        lat: Latitude (required for 'add').
+        lon: Longitude (required for 'add').
+        site_name: Human-readable name (required for 'add').
+        site_id: Site ID (required for 'remove', e.g. 'location:41.50_-70.70').
+    """
+    from kinship_shared.schema import Location
+
+    await _ensure_monitoring()
+    if not _monitoring_initialized:
+        return {"error": "Monitoring registry not available"}
+
+    if action == "add":
+        if lat is None or lon is None or not site_name:
+            return {"error": "lat, lon, and site_name are required for 'add'"}
+        sid = site_id or f"location:{lat:.2f}_{lon:.2f}"
+        site = MonitoringSite(
+            site_id=sid, name=site_name,
+            location=Location(lat=lat, lng=lon),
+        )
+        await _monitoring.add_site(site)
+        return {"status": "ok", "action": "added", "site_id": sid, "name": site_name}
+
+    elif action == "remove":
+        if not site_id:
+            return {"error": "site_id is required for 'remove'"}
+        removed = await _monitoring.remove_site(site_id)
+        return {"status": "ok" if removed else "not_found", "action": "removed", "site_id": site_id}
+
+    else:  # list
+        sites = await _monitoring.list_sites()
+        site_list = []
+        for s in sites:
+            latest = await _monitoring.get_latest_state(s.site_id)
+            site_list.append({
+                "site_id": s.site_id,
+                "name": s.name,
+                "lat": s.location.lat,
+                "lng": s.location.lng,
+                "last_checked": s.last_checked.isoformat() if s.last_checked else None,
+                "health_score": latest.overall_health_score if latest else None,
+                "trend": latest.trend_direction if latest else None,
+            })
+        return {"sites": site_list, "count": len(site_list)}
+
+
 @mcp.tool()
 async def ecology_memory_recall(
     lat: Optional[float] = None,

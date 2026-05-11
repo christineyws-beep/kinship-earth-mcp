@@ -25,6 +25,9 @@ from .graph_schema import (
 )
 from .graph_extract import EntityExtractor, ExtractedGraph
 from .graph_store import EcologicalGraph
+from .baselines import BaselineValues, compute_deviation, compute_health_score, classify_trend
+from .monitoring import MonitoringRegistry, MonitoringSite
+from .state_builder import build_ecosystem_state
 from .summarize import make_human_summary, summarize_search_result
 from .viz import make_climate_chart_hint, make_map_hint, make_visualization_hint
 from .storage_sqlite import SQLiteConversationStore
